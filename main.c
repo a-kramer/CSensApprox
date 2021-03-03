@@ -135,7 +135,7 @@ void simulate(gsl_odeiv2_driver* driver, simulation_t *sim, hsize_t N, double *t
     dt=tspan[1];
     // print table header:
     printf("# Simulation %li: \n",i);
-    printf("t\t");
+    printf("#t\t");
     for (k=0;k<y->size;k++)
       printf("y%li\t",k);
     printf("\n");
@@ -169,7 +169,7 @@ void simulate(gsl_odeiv2_driver* driver, simulation_t *sim, hsize_t N, double *t
       }
       if (status!=GSL_SUCCESS) break;      
     }
-    printf("\n");
+    printf("\n\n");
   }
 }
 
