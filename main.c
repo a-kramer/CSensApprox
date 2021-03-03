@@ -1,3 +1,4 @@
+#define _GNU_SOURCE
 #include <stdlib.h>
 #include <stdio.h>
 #include <assert.h>
@@ -5,24 +6,35 @@
 #include <gsl/gsl_matrix.h>
 #include <gsl/gsl_vector.h>
 #include <gsl/gsl_odeiv2.h>
+#include <math.h>
 #include <dlfcn.h>
 #include "h5block.h"
+
+#define FALSE 0
 
 #define DEFAULT 1
 #define FREE_ON_SUCCESS 1
 #define KEEP_ON_SUCCESS 2
 
+typedef struct {
+  gsl_vector *u;
+  gsl_vector *y0;
+  gsl_vector *t;
+} simulation_t;
 
 char* model_function(char *model_name, char *suffix){
   assert(model_name);
   char *f=malloc(sizeof(char)*(strlen(model_name)+strlen(suffix)+1));
   assert(f);
-  *mempcpy(mempcpy(f,model_name,strlen(model_name)),suffix,strlen(suffix))='\0';
-  printf(fprintf,"[%s] function: «%s»\n",__func__,f);
+  *((char *) mempcpy(mempcpy(f,model_name,strlen(model_name)),suffix,strlen(suffix)))='\0';
+  fprintf(stderr,"[%s] «%s»\n",__func__,f); fflush(stderr);
   return f;
 }
 
+
+
 void *load_or_exit(void *lib, char *name, int opt){
+  assert(lib && name);
   void *symbol=dlsym(lib,name);
   if (symbol) {
     fprintf(stderr,"[%s] «%s» loaded successfully.\n",__func__,name);
@@ -31,27 +43,30 @@ void *load_or_exit(void *lib, char *name, int opt){
     }
   }else{
     fprintf(stderr,"[%s] %s\n",__func__,dlerror());
-    exit(-2);
+    abort();
   } 
   return symbol;
 }
 
-gsl_odeiv2_system* load_system(char *model_name, size_t n, double *p){
+gsl_odeiv2_system load_system(char *model_name, size_t n, double *p){
   char *so=model_function(model_name,".so");
-  void *lib=dlopen(so);
-  void *f,*dfdy,*dfdp;
-  int i;
+  char *local_so = model_function("./",so);
+  void *lib=dlopen(local_so,RTLD_LAZY);
+  free(local_so);
+  void *f,*dfdy;
   char *symbol_name; // symbol name in .so
   if (lib){
     symbol_name=model_function(model_name,"_vf");
-    f=load_or_exit(so,symbol_name,FREE_ON_EXIT);
+    f=load_or_exit(lib,symbol_name,FREE_ON_SUCCESS);
     symbol_name=model_function(model_name,"_jac");
-    dfdy=load_or_exit(so,symbol_name,FREE_ON_EXIT);
+    dfdy=load_or_exit(lib,symbol_name,FREE_ON_SUCCESS);
   } else {
-    fprintf(stderr,"[%s] library «%s» could not be loaded: %s\n",so,dlerror());
-    exit(-1)
+    fprintf(stderr,"[%s] library «%s» could not be loaded: %s\n",__func__,so,dlerror());
+    abort();
   }
-  gsl_odeiv2_system *sys={f,dfdy,n,p};
+  gsl_odeiv2_system sys={f,dfdy,n,p};
+  free(so);
+  fprintf(stderr,"[%s] ode system created.\n",__func__); fflush(stderr);
   return sys;
 }
 
@@ -63,15 +78,128 @@ int option_is(char *s, char *l, char *value){
   return match;
 }
 
+herr_t load_one_sim(hid_t g_id, const char *name, const H5L_info_t *info, void *op_data){
+  gsl_vector *u = h5_to_gsl(g_id,name,"input");
+  gsl_vector *y0 = h5_to_gsl(g_id,name,"InitialValue");
+  gsl_vector *t = h5_to_gsl(g_id,name,"time");
+  gsl_vector_int *index = h5_to_gsl_int(g_id,name,"index");
+  simulation_t *sim = op_data;
+  int i=gsl_vector_int_get(index,0);
+  fprintf(stderr,"[%s] processing «%s» (index %i)",__func__,name,i);
+  assert(u && y0 && t);
+  sim[i].u=u;
+  sim[i].y0=y0;
+  sim[i].t=t;
+  return 0;
+}
+
+simulation_t* sim_from_h5(hid_t g_id, hsize_t *N){
+  herr_t h5ec=H5Gget_num_objs(g_id,N);
+  assert(h5ec>=0);
+  fprintf(stderr,"[%s] number of data sets: %lli\n",__func__,N[0]); fflush(stderr);
+  simulation_t *sim=malloc(sizeof(simulation_t)*N[0]);
+  hsize_t idx=0;
+  h5ec=H5Literate(g_id, H5_INDEX_NAME, H5_ITER_NATIVE, &idx, load_one_sim, sim);
+  assert(h5ec>=0);
+  return sim;
+}
+
+void fix_tspan_if_necessary(gsl_vector *t, double *tspan){
+  assert(tspan);
+  double tf=gsl_vector_max(t)*1.3; // a reasonable stop time [default value]
+  if (tspan[2]==tspan[0]) tspan[2]=tf;
+  assert(tspan[2]>tspan[0]);
+  if (tspan[1]==0.0) tspan[1]=1e-2*(tspan[2]-tspan[1]);
+  fprintf(stderr,"[%s] simulating in t: [%g,%g] with an increment of %g\n",__func__,tspan[0],tspan[2],tspan[1]);
+
+}
+
+void simulate(gsl_odeiv2_driver* driver, simulation_t *sim, hsize_t N, double *tspan, gsl_vector *u){
+  assert(driver && sim && N>0);
+  assert(tspan);
+  assert(sim);
+  size_t d=sim[0].y0->size;
+  gsl_vector *y=gsl_vector_alloc(d);
+  size_t i,j,k;
+  
+  double t,tf,dt;
+  size_t n;
+  int status;
+  for (i=0;i<N;i++){
+    gsl_odeiv2_driver_reset(driver);
+    // fix possible issues with simulation time specification:
+    fix_tspan_if_necessary(sim[i].t,tspan);    
+    gsl_vector_memcpy(y,sim[i].y0);
+    gsl_vector_memcpy(u,sim[i].u);
+     t=tspan[0];
+    dt=tspan[1];
+    // print table header:
+    printf("# Simulation %li: \n",i);
+    printf("t\t");
+    for (k=0;k<y->size;k++)
+      printf("y%li\t",k);
+    printf("\n");
+    n=(size_t) ((tspan[2]-tspan[0])/tspan[1]);
+    for (j=0;j<n;j++){
+      tf=t+dt;
+      status=gsl_odeiv2_driver_apply(driver, &t, tf, y->data);
+      //report any error codes to the user
+      switch (status){
+      case GSL_EMAXITER:
+	fprintf(stderr,"[%s] simulation %li, time_point %li: maximum number of steps reached.\n",__func__,i,j);
+	fprintf(stderr,"\t\tfinal time: %.10g (short of %.10g)",t,tf);
+	break;
+      case GSL_ENOPROG:
+	fprintf(stderr,"[%s] simulation %li, time_point %li: step size dropeed below set minimum.\n",__func__,i,j);
+	fprintf(stderr,"\t\tfinal time: %.10g (short of %.10g)",t,tf);
+	break;
+      case GSL_EBADFUNC:
+	fprintf(stderr,"[%s] simulation %li, time_point %li: bad function.\n",__func__,i,j);
+	fprintf(stderr,"\t\tfinal time: %.10g (short of %.10g)",t,tf);
+	break;
+      case GSL_SUCCESS:
+	printf("%g\t",t);
+	for (k=0;k<y->size;k++)
+	  printf("%g\t",gsl_vector_get(y,k));
+	printf("\n");
+	break;
+      default:
+	fprintf(stderr,"[%s] unhandled error code: %#x\n",__func__,status);
+	abort();
+      }
+      if (status!=GSL_SUCCESS) break;      
+    }
+    printf("\n");
+  }
+}
+
+double* read_tspan(char *val){
+  int j;
+  char *s,*p;
+  double *t=calloc(3,sizeof(double));
+  s=val;
+  p=val;
+
+  for (j=0;j<3;j++){
+    s=p;
+    t[j]=strtod(s,&p);
+    if (s==p) break;
+  }
+  return t;
+}
+
+
 int main(int argc, char *argv[]){
   int i=0;
   char *model_name=NULL, *h5file=NULL;
   double abs_tol=1e-6,rel_tol=1e-5,h=1e-3;
-  while (i<argc){
+  double *t=NULL;
+
+  for (i=1;i<argc;i++){
     if (option_is("-m","--model",argv[i])){
       i++;
       model_name=malloc(sizeof(char)*(strlen(argv[i])+1));
-      strcpy(model_so,argv[i]);
+      strcpy(model_name,argv[i]);
     } else if (option_is("-d","--data",argv[i])){
       i++;
       h5file=malloc(sizeof(char)*(strlen(argv[i])+1));
@@ -85,29 +213,55 @@ int main(int argc, char *argv[]){
     } else if (option_is("-h","--step-size",argv[i])){
       i++;
       h=strtod(argv[i],NULL);
+    } else if (option_is("-t","--sim-time",argv[i])){
+      i++;
+      t=read_tspan(argv[i]);
     }else {
       fprintf(stderr,"[%s] unknown option «%s»\n",__func__,argv[i]);
       exit(1);
     }
-    i++;
   }
+  if (!t) t=read_tspan("0:0:0");
+  fprintf(stderr,"[%s] t: %g:%g:%g\n",__func__,t[0],t[1],t[2]);
   assert(h5file);
   assert(model_name);
   // load data related to this model
-  h5block_t* h5=h5block_alloc(2);
-  hid_t data=H5Fopen(h5file,H5F_ACC_RDONLY,H5P_DEFAULT);
-  hid_t prior=H5Gopen2(data,"prior",H5P_DEFAULT);
+  //h5block_t* h5=h5block_alloc(2);
+  hid_t h5f_id=H5Fopen(h5file,H5F_ACC_RDONLY,H5P_DEFAULT);
+  hid_t prior=H5Gopen2(h5f_id,"prior",H5P_DEFAULT);
 
-  gsl_vector *p=h5_to_gsl(prior,"mu",NULL);
-  size_t i,n=p->size;
+
+  gsl_vector *mu=h5_to_gsl(prior,"mu",NULL);
+ 
+
   fprintf(stderr,"[%s] prior: ",__func__);
-  for (i=0;i<n;i++) fprintf(stderr,"%g ",gsl_vector_get(p,i));
+  for (i=0;i<mu->size;i++) fprintf(stderr,"%g ",gsl_vector_get(mu,i));
   fprintf(stderr,"\n");
 
-  size_t d=???; // get from initial conditions
   
-  gsl_odeiv2_system* sys=load_system(model_name, d, p->data);
-  gsl_odeiv2_step *s;
-  gsl_odeiv2_driver *driver=gsl_odeiv2_driver_alloc_y_new(sys,gsl_odeiv2_step_msbdf,h,abs_tol,rel_tol)
+  hsize_t N;
+  hid_t data=H5Gopen2(h5f_id,"data",H5P_DEFAULT);
+  fprintf(stderr,"[%s] data id: %ld\n",__func__,data);
+  simulation_t *sim = sim_from_h5(data,&N);
+  size_t d=sim[0].y0->size; // get from initial conditions
+
+  size_t nu=sim[0].u->size;
+  gsl_vector *par=gsl_vector_alloc(mu->size + nu);
+  gsl_vector_view p=gsl_vector_subvector(par,0,mu->size);
+  gsl_vector_view u=gsl_vector_subvector(par,mu->size,nu);
+  gsl_vector_memcpy(&(p.vector),mu);
+  for (i=0;i<mu->size;i++) par->data[i]=exp(par->data[i]);
+
+  gsl_odeiv2_system sys = load_system(model_name, d, par->data);
+
+  const gsl_odeiv2_step_type * T=gsl_odeiv2_step_msbdf;
+  gsl_odeiv2_driver *driver=gsl_odeiv2_driver_alloc_y_new(&sys,T,h,abs_tol,rel_tol);
+
+  
+  // the most CPU work happens here:
+  simulate(driver,sim,N,t,&(u.vector));
+
+  gsl_odeiv2_driver_free(driver);
+
   return EXIT_SUCCESS;
 }
