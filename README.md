@@ -56,7 +56,7 @@ vector is used to set a reasonable simulation time-span.
 The model has a parameter slot (a vector `p`), which will be assembled like this:
 
 ```R
-p=c(exp(mu), u); % in R, for illustration
+p=c(exp(mu), u); # in R, for illustration
 ```
 
 This is because the model has unknown parameters, for which we have a
