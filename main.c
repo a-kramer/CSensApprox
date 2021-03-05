@@ -74,7 +74,7 @@ int option_is(char *s, char *l, char *value){
   int match=FALSE;
   assert(value);
   if (s) match=(strcmp(value,s)==0);
-  else if (l) match|=(strcmp(value,l)==0);
+  if (l) match|=(strcmp(value,l)==0);
   return match;
 }
 
@@ -130,6 +130,7 @@ void simulate(gsl_odeiv2_driver* driver, simulation_t *sim, hsize_t N, double *t
     // fix possible issues with simulation time specification:
     fix_tspan_if_necessary(sim[i].t,tspan);    
     gsl_vector_memcpy(y,sim[i].y0);
+    //gsl_vector_add_constant(y,1e-5);
     gsl_vector_memcpy(u,sim[i].u);
      t=tspan[0];
     dt=tspan[1];
@@ -181,6 +182,7 @@ double* read_tspan(char *val){
   p=val;
 
   for (j=0;j<3;j++){
+    if (p[0]==':') p++;
     s=p;
     t[j]=strtod(s,&p);
     if (s==p) break;
@@ -196,14 +198,15 @@ int main(int argc, char *argv[]){
   double *t=NULL;
 
   for (i=1;i<argc;i++){
+    fprintf(stderr,"[%s] %s=%s\n",__func__,argv[i],argv[i+1]);
     if (option_is("-m","--model",argv[i])){
       i++;
-      model_name=malloc(sizeof(char)*(strlen(argv[i])+1));
-      strcpy(model_name,argv[i]);
+      model_name=strdup(argv[i]); //malloc(sizeof(char)*(strlen(argv[i])+1));
+      //strcpy(model_name,argv[i]);
     } else if (option_is("-d","--data",argv[i])){
       i++;
-      h5file=malloc(sizeof(char)*(strlen(argv[i])+1));
-      strcpy(h5file,argv[i]);
+      h5file=strdup(argv[i]); //malloc(sizeof(char)*(strlen(argv[i])+1));
+      //strcpy(h5file,argv[i]);
     } else if (option_is("-a","--abs-tol",argv[i])){
       i++;
       abs_tol=strtod(argv[i],NULL);
@@ -221,23 +224,19 @@ int main(int argc, char *argv[]){
       exit(1);
     }
   }
-  if (!t) t=read_tspan("0:0:0");
+  if (!t) t=read_tspan("0 0 0");
   fprintf(stderr,"[%s] t: %g:%g:%g\n",__func__,t[0],t[1],t[2]);
   assert(h5file);
   assert(model_name);
-  // load data related to this model
-  //h5block_t* h5=h5block_alloc(2);
+
   hid_t h5f_id=H5Fopen(h5file,H5F_ACC_RDONLY,H5P_DEFAULT);
   hid_t prior=H5Gopen2(h5f_id,"prior",H5P_DEFAULT);
 
-
   gsl_vector *mu=h5_to_gsl(prior,"mu",NULL);
  
-
   fprintf(stderr,"[%s] prior: ",__func__);
   for (i=0;i<mu->size;i++) fprintf(stderr,"%g ",gsl_vector_get(mu,i));
   fprintf(stderr,"\n");
-
   
   hsize_t N;
   hid_t data=H5Gopen2(h5f_id,"data",H5P_DEFAULT);
@@ -254,7 +253,7 @@ int main(int argc, char *argv[]){
 
   gsl_odeiv2_system sys = load_system(model_name, d, par->data);
 
-  const gsl_odeiv2_step_type * T=gsl_odeiv2_step_msbdf;
+  const gsl_odeiv2_step_type * T=gsl_odeiv2_step_rk8pd;//gsl_odeiv2_step_msbdf;
   gsl_odeiv2_driver *driver=gsl_odeiv2_driver_alloc_y_new(&sys,T,h,abs_tol,rel_tol);
 
   
