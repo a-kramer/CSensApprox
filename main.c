@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <assert.h>
 #include <string.h>
+#include <dirent.h>
 #include <gsl/gsl_matrix.h>
 #include <gsl/gsl_vector.h>
 #include <gsl/gsl_odeiv2.h>
@@ -85,7 +86,7 @@ herr_t load_one_sim(hid_t g_id, const char *name, const H5L_info_t *info, void *
   gsl_vector_int *index = h5_to_gsl_int(g_id,name,"index");
   simulation_t *sim = op_data;
   int i=gsl_vector_int_get(index,0);
-  fprintf(stderr,"[%s] processing «%s» (index %i)",__func__,name,i);
+  fprintf(stderr,"[%s] processing «%s» (index %i)\n",__func__,name,i);
   assert(u && y0 && t);
   sim[i].u=u;
   sim[i].y0=y0;
@@ -174,6 +175,31 @@ void simulate(gsl_odeiv2_driver* driver, simulation_t *sim, hsize_t N, double *t
   }
 }
 
+char *first_so(){
+  char *name = NULL;
+  char *p;
+  DIR *dp = opendir (".");
+  assert(dp);
+  struct dirent *d;
+  while ((d=readdir (dp))!=NULL){
+    p=strrchr(d->d_name,'.');
+    if (d->d_type==DT_REG && p && strcmp(p,".so")==0){
+      p[0]='\0';
+      name=strdup(d->d_name);
+      p[0]='.';
+      break;
+    }
+  }
+  closedir (dp);
+  if (name){
+    fprintf(stderr,"[%s] automatically determined model name: «%s».\n",__func__,name);
+  } else {
+    fprintf(stderr,"[%s] no model name specified: please use the --model option.\n",__func__);
+    abort();
+  }
+  return name;
+}
+
 double* read_tspan(char *val){
   int j;
   char *s,*p;
@@ -226,12 +252,15 @@ int main(int argc, char *argv[]){
   }
   if (!t) t=read_tspan("0 0 0");
   fprintf(stderr,"[%s] t: %g:%g:%g\n",__func__,t[0],t[1],t[2]);
-  assert(h5file);
-  assert(model_name);
+  //assert(h5file);
+  //assert(model_name);
+  if (!model_name) model_name=first_so();
 
+  
+  if (!h5file) h5file=model_function(model_name,".h5");
   hid_t h5f_id=H5Fopen(h5file,H5F_ACC_RDONLY,H5P_DEFAULT);
+  assert(h5f_id);
   hid_t prior=H5Gopen2(h5f_id,"prior",H5P_DEFAULT);
-
   gsl_vector *mu=h5_to_gsl(prior,"mu",NULL);
  
   fprintf(stderr,"[%s] prior: ",__func__);

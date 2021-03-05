@@ -24,12 +24,16 @@ Options:
 |:----:|:---|:--------:|:-----:|:------|
 |`-a` |`--abs-tol`| double | 10⁻⁶ | absolute tolerance (solver)|
 |`-r` |`--rel-tol`| double | 10⁻⁵ | relative tolerance (solver)|
-|`-m` |`--model`| string | NONE | name of the model (no suffix)|
-|`-d` |`--data` | string | NONE | simulation instructions (hdf5 file)|
+|`-m` |`--model`| string | first `*.so` file | name of the model (no suffix)|
+|`-d` |`--data` | string | `${MODEL}.h5` | simulation instructions (hdf5 file)|
 |`-h` |`--step-size`| double | 10⁻³ | initial step size (suggestion) |
-|`-t` |`--sim-time`| double | NONE | solver [time span](#Simulation-Time-Span) | 
+|`-t` |`--sim-time`| double | 0:1%:max(tⱼ) | solver _time span_ | 
 
-The time span is a range (e.g `-1:0.1:6`), with an increment (explained in another section).
+If no model name is given, the program searches the current working
+directory for the first file ending in `.so` and takes everything
+before `.so` as the model's name.
+
+The [time span](#Simulation-Time-Span) is a range, e.g: `-1:0.1:6`, with an increment.
 
 ### Simulation Instructions (HDF5)
 
@@ -52,20 +56,20 @@ vector is used to set a reasonable simulation time-span.
 The model has a parameter slot (a vector `p`), which will be assembled like this:
 
 ```octave
-p=[exp(mu), u]; # 
+p=[exp(mu), u]; # in GNU Octave, for illustration
 ```
 
-This is because the model has unknown parameters, for which we have a probability density with median µ (logarithmic) and known parameters u, which represent the input to the model (as part of an _experiment_).
+This is because the model has unknown parameters, for which we have a probability density with median µ (logarithmic) and known parameters u, which represent the input to the model (as part of an _experiment_). In C, this concatenation is of course more difficult to write.
 
 ### Tolerances and Step-Size
 
 The tolerances inform the step size controls, and are used as described in the [gsl documentation](https://www.gnu.org/software/gsl/doc/html/ode-initval.html#adaptive-step-size-control):
 
-```octave
-Dᵢ = abs_tol + rel_tol × |yᵢ|
+```C
+D[i] = abs_tol + rel_tol * |y[i]|
 ```
 
-where `Dᵢ` is the integration error bound. The `step-size` is adaptive, this is only a suggestion.
+where `D[i]` is the integration error bound. The `step-size` is adaptive, this is only a suggestion.
 
 
 ### Simulation Time-Span
@@ -73,11 +77,15 @@ where `Dᵢ` is the integration error bound. The `step-size` is adaptive, this i
 The time span can be given in GNU Octave/Matlab/Julia syntax: `a:b:c`
 or alternatively, just as `'a b c'`. This will be interpreted as 
 
-a. initial value
-b. increment
-c. final value
+|symbol|meaning        |default     |
+|-----:|:--------------|-----------:|
+|    a | initial value | 0.0        |
+|    b | increment     | 1%         |
+|    c | final value   | 1.3 max(t) |
 
-The parser is very simple, so `a:c` will not work as expected. If
-anything is 0, the value will be corrected using some defaults and
-assumptions. The default for `c` is `1.3 * max(measurement time)` in
-the hdf5 data file.
+The parser is very simple, so `a:c` will not work as expected (this
+will be interpreted as `a:b`).  If c is missing or 0, or more
+generally equal to a, then the value is calculated as: `c=1.3 *
+max(time)`, where `time` is the hdf5 attribute: the measurement time
+of the experiment. A missing value for b be corrected as
+`b=(c-a)/100.0`.
