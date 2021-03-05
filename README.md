@@ -55,11 +55,15 @@ vector is used to set a reasonable simulation time-span.
 
 The model has a parameter slot (a vector `p`), which will be assembled like this:
 
-```octave
-p=[exp(mu), u]; # in GNU Octave, for illustration
+```R
+p=c(exp(mu), u); % in R, for illustration
 ```
 
-This is because the model has unknown parameters, for which we have a probability density with median µ (logarithmic) and known parameters u, which represent the input to the model (as part of an _experiment_). In C, this concatenation is of course more difficult to write.
+This is because the model has unknown parameters, for which we have a
+probability density with median µ (logarithmic) and known parameters
+u, which represent the input to the model (as part of an
+_experiment_). In C, this concatenation is of course more difficult to
+write.
 
 ### Tolerances and Step-Size
 
