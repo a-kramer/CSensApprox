@@ -110,7 +110,7 @@ void fix_tspan_if_necessary(gsl_vector *t, double *tspan){
   double tf=gsl_vector_max(t)*1.3; // a reasonable stop time [default value]
   if (tspan[2]==tspan[0]) tspan[2]=tf;
   assert(tspan[2]>tspan[0]);
-  if (tspan[1]==0.0) tspan[1]=1e-2*(tspan[2]-tspan[1]);
+  if (tspan[1]==0.0) tspan[1]=1e-2*(tspan[2]-tspan[0]);
   fprintf(stderr,"[%s] simulating in t: [%g,%g] with an increment of %g\n",__func__,tspan[0],tspan[2],tspan[1]);
 
 }
