@@ -1,0 +1,20 @@
+CC = gcc
+CFLAGS = --std=gnu11 -march=native -O2 -Wall -Wfatal-errors
+.PHONY: all
+
+HDF5_INCLUDE = -I/usr/include/hdf5/serial
+HDF5_LD = -L/usr/lib/x86_64-linux-gnu/hdf5/serial -lhdf5 -lhdf5_hl 
+GSL_LD =  -lgsl -lgslcblas -lm
+
+all: gsl_odeiv
+
+
+h5block.o: h5block.c h5block.h
+	gcc $(CFLAGS) -c $(HDF5_INCLUDE)  $^
+
+
+gsl_odeiv: main.c h5block.o
+	gcc $(CFLAGS) $(HDF5_INCLUDE) -o $@ $^ $(HDF5_LD) $(GSL_LD) -ldl
+
+
+
