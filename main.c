@@ -204,14 +204,15 @@ double* read_tspan(char *val){
   int j;
   char *s,*p;
   double *t=calloc(3,sizeof(double));
-  s=val;
-  p=val;
-
-  for (j=0;j<3;j++){
-    if (p[0]==':') p++;
-    s=p;
-    t[j]=strtod(s,&p);
-    if (s==p) break;
+  if (val){
+    s=val;
+    p=val;
+    for (j=0;j<3;j++){
+      if (p[0]==':') p++;
+      s=p;
+      t[j]=strtod(s,&p);
+      if (s==p) break;
+    }
   }
   return t;
 }
@@ -252,12 +253,12 @@ int main(int argc, char *argv[]){
   }
   if (!t) t=read_tspan("0 0 0");
   fprintf(stderr,"[%s] t: %g:%g:%g\n",__func__,t[0],t[1],t[2]);
-  //assert(h5file);
-  //assert(model_name);
-  if (!model_name) model_name=first_so();
 
+  if (!model_name) model_name=first_so();
+  assert(model_name);
   
   if (!h5file) h5file=model_function(model_name,".h5");
+  assert(h5file);
   hid_t h5f_id=H5Fopen(h5file,H5F_ACC_RDONLY,H5P_DEFAULT);
   assert(h5f_id);
   hid_t prior=H5Gopen2(h5f_id,"prior",H5P_DEFAULT);
