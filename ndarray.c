@@ -11,7 +11,7 @@ void ndarray_test(){
   ndarray_print(a,"test array");
   ndarray_free(a);
   fflush(stdout);
-  printf("[%s] ndarray freed.\n");
+  printf("[%s] ndarray freed.\n",__func__);
 }
 
 ndarray* ndarray_alloc(int rank, int *size){
@@ -33,31 +33,23 @@ ndarray* ndarray_alloc(int rank, int *size){
   return A;
 }
 
-double ndarray_value(ndarray *a, int *index){
-  assert(a);
-  assert(index);
-  int rank=a->rank;
-  int *size=a->size;
-  int i,j=0,n=1;
-  for (i=0;i<rank;i++){
-    j+=index[i]*n;
-    n=a->prod[i];
-  }
-  return a->value[j];
-}
 
 double* ndarray_ptr(ndarray *a, int *index){
   assert(a);
   assert(index);
-  int rank=a->rank;
-  int *size=a->size;
   int i,j=0,n=1;
-  for (i=0;i<rank;i++){
-    j+=size[i]*n;
+  for (i=0;i<a->rank;i++){
+    j+=index[i]*n;
     n=a->prod[i];
   }
+  assert(j<n);
   return &(a->value[j]);
 }
+
+double ndarray_value(ndarray *a, int *index){
+  return *(ndarray_ptr(a,index));
+}
+
 
 void ndarray_to_h5(ndarray *a, hid_t loc_id, const char *obj_name){
   herr_t status=0;

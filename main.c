@@ -7,6 +7,7 @@
 #include <gsl/gsl_matrix.h>
 #include <gsl/gsl_vector.h>
 #include <gsl/gsl_odeiv2.h>
+#include <gsl/gsl_blas.h>
 #include <math.h>
 #include <dlfcn.h>
 #include "h5block.h"
@@ -125,6 +126,64 @@ void fix_tspan_if_necessary(gsl_vector *t, double *tspan){
 
 }
 
+
+gsl_matrix* transition_matrix(gsl_matrix *Ji, gsl_matrix *Jf, double ti, double tf){
+  double s=0.5*(tf-ti);
+  double b=0.0;
+  size_t ny=Ji->size1;
+  gsl_matrix *identity=gsl_matrix_alloc(ny,ny);
+  gsl_matrix *PHI=gsl_matrix_alloc(ny,ny);
+  gsl_matrix_set_identity(PHI);
+  gsl_matrix_set_identity(identity);
+  int i,n=3;
+  for (i=0;i<n;i++){
+    // PHI = s*Jf*PHI + b*PHI + I:
+    gsl_blas_dgemm(CblasNoTrans,CblasNoTrans, s, Jf, PHI, b, PHI);
+    gsl_matrix_add(PHI,identity);
+  }
+  gsl_matrix_free(identity);
+  return PHI;
+}
+     
+void sensitivity_approximation(solution_t *solution){
+  assert(solution && solution->Jp && solution->Jy && solution->t);
+
+  int np = solution->Jp->size[0];
+  int ny = solution->Jp->size[1];
+  int nt = solution->t->size;
+  int index[3]={0,0,0};
+  int j;
+  double tf, ti;
+  gsl_matrix_view Sf,Si,Ji,Jf,B;
+  gsl_matrix *PHI_fwd, *PHI_bwd;
+  gsl_matrix *S_temp=gsl_matrix_alloc(ny,np);
+  assert(S_temp);
+
+  for (j=1;j<nt;j++){
+    index[2]=j; // time index
+    Sf = gsl_matrix_view_array(ndarray_ptr(solution->Sy,index),ny,np);
+    Jf=gsl_matrix_view_array(ndarray_ptr(solution->Jy,index),ny,ny);
+    B=gsl_matrix_view_array(ndarray_ptr(solution->Jp,index),ny,np);
+    tf=gsl_vector_get(solution->t,j);
+    
+    index[2]=j-1; // previous time index
+    Si = gsl_matrix_view_array(ndarray_ptr(solution->Sy,index),ny,np);
+    Ji=gsl_matrix_view_array(ndarray_ptr(solution->Jy,index),ny,ny);
+    ti=gsl_vector_get(solution->t,j-1);
+
+    PHI_fwd = transition_matrix(&Ji.matrix,&Jf.matrix,ti,tf);
+    PHI_bwd = transition_matrix(&Ji.matrix,&Jf.matrix,tf,ti);
+    // Sf = PHI(k+1,k) * (0.5*(PHI(k,k+1)*B(k) + B(k)) + Si )
+    gsl_blas_dgemm(CblasNoTrans,CblasNoTrans, 1.0, PHI_bwd, &B.matrix, 0.0, S_temp);
+    gsl_matrix_add(S_temp,&B.matrix);
+    gsl_matrix_scale(S_temp,0.5);
+    gsl_matrix_add(S_temp,&Si.matrix);
+    gsl_blas_dgemm(CblasNoTrans,CblasNoTrans, 1.0, PHI_fwd, S_temp, 0.0, &Sf.matrix);
+  }
+  gsl_matrix_free(S_temp);
+}
+
+
 solution_t** simulate(gsl_odeiv2_system sys, gsl_odeiv2_driver* driver, simulation_t *sim, hsize_t N, double *tspan, gsl_vector *u, gsl_vector *par, jacp dfdp, hid_t h5f){
   
   assert(driver && sim && N>0);
@@ -199,12 +258,13 @@ solution_t** simulate(gsl_odeiv2_system sys, gsl_odeiv2_driver* driver, simulati
       }
       if (status!=GSL_SUCCESS) break;
     }
-    //sensitivity_approximation(&solution[i]);
+    sensitivity_approximation(solution[i]);
     if (h5f){
       gsl_matrix_to_h5(solution[i]->y,g_id,"state");
       gsl_vector_to_h5(solution[i]->t,g_id,"time",NULL);
       ndarray_to_h5(solution[i]->Jy,g_id,"jac");
       ndarray_to_h5(solution[i]->Jp,g_id,"jacp");
+      ndarray_to_h5(solution[i]->Sy,g_id,"sensitivity");
       H5Gclose(g_id);
     }    
     printf("\n\n");
@@ -252,15 +312,6 @@ double* read_tspan(char *val){
     }
   }
   return t;
-}
-
-gsl_matrix* transition_matrix(gsl_matrix *PHI, double t, double t0){
-  return PHI;
-}
-
-ndarray* sensitivity_approximation(solution_t *solution){
-  
-  return NULL;
 }
 
 
@@ -335,7 +386,7 @@ int main(int argc, char *argv[]){
   double *J=malloc(sizeof(double)*jacp_size);
   gsl_vector_memcpy(&(u.vector),sim[0].u);
   dfdp(0,sim[0].y0->data,J,par->data);
-  fprintf(stderr,"[%s] test evaluation of jacp",__func__);
+  fprintf(stderr,"[%s] test evaluation of jacp\n",__func__);
   for (i=0;i<jacp_size;i++) fprintf(stderr,"%g ",J[i]);
   fprintf(stderr,"\n\n");
   const gsl_odeiv2_step_type * T=gsl_odeiv2_step_msbdf;
