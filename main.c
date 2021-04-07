@@ -185,7 +185,6 @@ void sensitivity_approximation(solution_t *solution){
 
 
 solution_t** simulate(gsl_odeiv2_system sys, gsl_odeiv2_driver* driver, simulation_t *sim, hsize_t N, double *tspan, gsl_vector *u, gsl_vector *par, jacp dfdp, hid_t h5f){
-  
   assert(driver && sim && N>0);
   assert(tspan);
   assert(sim);
@@ -247,7 +246,7 @@ solution_t** simulate(gsl_odeiv2_system sys, gsl_odeiv2_driver* driver, simulati
 	Jy = ndarray_ptr(solution[i]->Jy,index);
 	Jp = ndarray_ptr(solution[i]->Jp,index);
 	sys.jacobian(t, y->data, Jy, dfdt, par->data);
-	dfdp(t,y->data,Jp,par->data);
+	        dfdp(t, y->data, Jp, par->data);
 	y_row = gsl_matrix_row(solution[i]->y,j);
 	gsl_vector_memcpy(&y_row.vector,y);
 	gsl_vector_set(solution[i]->t,j,t);
