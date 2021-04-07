@@ -314,9 +314,6 @@ double* read_tspan(char *val){
   return t;
 }
 
-
-
-
 int main(int argc, char *argv[]){
   int i=0;
   char *model_name=NULL, *h5file=NULL;

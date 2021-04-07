@@ -56,12 +56,9 @@ void ndarray_to_h5(ndarray *a, hid_t loc_id, const char *obj_name){
   assert(a);
   hsize_t *dims = malloc(sizeof(hsize_t)*a->rank);
   int i;
+  int rank=a->rank;
   // hdf5 stores things row-wise, so, it interprets the size differently
-  for (i=0;i<a->rank;i++) dims[i] = (hsize_t) a->size[i];
-  if (a->rank>=2) { // fake-transpose
-    dims[0]=a->size[1];
-    dims[1]=a->size[0];
-  }
+  for (i=0;i<rank;i++) dims[i] = (hsize_t) a->size[rank-1-i];
   status=H5LTmake_dataset_double(loc_id, obj_name, (hsize_t) a->rank, dims, a->value);
   assert(status>=0);
 }
