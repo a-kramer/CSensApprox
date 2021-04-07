@@ -158,7 +158,7 @@ void gsl_matrix_to_h5(gsl_matrix *m, hid_t loc_id, const char *obj_name){
   assert(m);
   hsize_t size[2]={m->size1,m->size2};
   status=H5LTmake_dataset_double(loc_id, obj_name, 2, size, m->data);
-  assert(status>0);
+  assert(status>=0);
 }
 
 
@@ -170,5 +170,5 @@ void gsl_vector_to_h5(gsl_vector *v, hid_t loc_id, const char *obj_name, const c
   } else {
     status=H5LTmake_dataset_double(loc_id, obj_name, 1, &size, v->data);
   }
-  assert(status>0);
+  assert(status>=0);
 }

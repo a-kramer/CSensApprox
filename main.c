@@ -10,7 +10,8 @@
 #include <math.h>
 #include <dlfcn.h>
 #include "h5block.h"
-
+#include "ndarray.h"
+#include "solution.h"
 #define FALSE 0
 
 #define DEFAULT 1
@@ -21,18 +22,23 @@ typedef struct {
   gsl_vector *u;
   gsl_vector *y0;
   gsl_vector *t;
+  char *name;
 } simulation_t;
+
+typedef int(*jacp)(double, const double [], double *, void *);
+
 
 char* model_function(char *model_name, char *suffix){
   assert(model_name);
-  char *f=malloc(sizeof(char)*(strlen(model_name)+strlen(suffix)+1));
+  size_t size=(strlen(model_name)+strlen(suffix)+1);
+  assert(size);
+  char *f=malloc(sizeof(char)*size);
   assert(f);
-  *((char *) mempcpy(mempcpy(f,model_name,strlen(model_name)),suffix,strlen(suffix)))='\0';
+  //*((char *) mempcpy(mempcpy(f,model_name,strlen(model_name)),suffix,strlen(suffix)))='\0';
+  strcat(strcpy(f,model_name),suffix);
   fprintf(stderr,"[%s] «%s»\n",__func__,f); fflush(stderr);
   return f;
 }
-
-
 
 void *load_or_exit(void *lib, char *name, int opt){
   assert(lib && name);
@@ -49,18 +55,21 @@ void *load_or_exit(void *lib, char *name, int opt){
   return symbol;
 }
 
-gsl_odeiv2_system load_system(char *model_name, size_t n, double *p){
+gsl_odeiv2_system load_system(char *model_name, size_t n, double *p, jacp *dfdp){
   char *so=model_function(model_name,".so");
   char *local_so = model_function("./",so);
   void *lib=dlopen(local_so,RTLD_LAZY);
   free(local_so);
   void *f,*dfdy;
+  //dfdp=malloc(sizeof(jacp*));
   char *symbol_name; // symbol name in .so
   if (lib){
     symbol_name=model_function(model_name,"_vf");
     f=load_or_exit(lib,symbol_name,FREE_ON_SUCCESS);
     symbol_name=model_function(model_name,"_jac");
     dfdy=load_or_exit(lib,symbol_name,FREE_ON_SUCCESS);
+    symbol_name=model_function(model_name,"_jacp");
+    *dfdp=load_or_exit(lib,symbol_name,FREE_ON_SUCCESS);
   } else {
     fprintf(stderr,"[%s] library «%s» could not be loaded: %s\n",__func__,so,dlerror());
     abort();
@@ -91,6 +100,7 @@ herr_t load_one_sim(hid_t g_id, const char *name, const H5L_info_t *info, void *
   sim[i].u=u;
   sim[i].y0=y0;
   sim[i].t=t;
+  sim[i].name=strdup(name);
   return 0;
 }
 
@@ -115,18 +125,27 @@ void fix_tspan_if_necessary(gsl_vector *t, double *tspan){
 
 }
 
-void simulate(gsl_odeiv2_driver* driver, simulation_t *sim, hsize_t N, double *tspan, gsl_vector *u){
+solution_t** simulate(gsl_odeiv2_system sys, gsl_odeiv2_driver* driver, simulation_t *sim, hsize_t N, double *tspan, gsl_vector *u, gsl_vector *par, jacp dfdp, hid_t h5f){
+  
   assert(driver && sim && N>0);
   assert(tspan);
   assert(sim);
   size_t d=sim[0].y0->size;
+  size_t p=par->size;
   gsl_vector *y=gsl_vector_alloc(d);
+  gsl_vector_view y_row;
   size_t i,j,k;
-  
+  solution_t **solution=malloc(sizeof(solution_t*)*N);
+  int index[3]={0,0,0};
   double t,tf,dt;
+  double *Jy,*Jp;
+  double *dfdt=malloc(sizeof(double)*d);
   size_t n;
+  hid_t g_id;
   int status;
   for (i=0;i<N;i++){
+    assert(sim[i].name && strlen(sim[i].name));
+    if (h5f) g_id = H5Gcreate2(h5f, sim[i].name, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
     gsl_odeiv2_driver_reset(driver);
     // fix possible issues with simulation time specification:
     fix_tspan_if_necessary(sim[i].t,tspan);    
@@ -142,6 +161,7 @@ void simulate(gsl_odeiv2_driver* driver, simulation_t *sim, hsize_t N, double *t
       printf("y%li\t",k);
     printf("\n");
     n=(size_t) ((tspan[2]-tspan[0])/tspan[1]);
+    solution[i]=solution_alloc(d,p,n);
     for (j=0;j<n;j++){
       tf=t+dt;
       status=gsl_odeiv2_driver_apply(driver, &t, tf, y->data);
@@ -164,15 +184,32 @@ void simulate(gsl_odeiv2_driver* driver, simulation_t *sim, hsize_t N, double *t
 	for (k=0;k<y->size;k++)
 	  printf("%g\t",gsl_vector_get(y,k));
 	printf("\n");
+	index[2]=j;
+	Jy = ndarray_ptr(solution[i]->Jy,index);
+	Jp = ndarray_ptr(solution[i]->Jp,index);
+	sys.jacobian(t, y->data, Jy, dfdt, par->data);
+	dfdp(t,y->data,Jp,par->data);
+	y_row = gsl_matrix_row(solution[i]->y,j);
+	gsl_vector_memcpy(&y_row.vector,y);
+	gsl_vector_set(solution[i]->t,j,t);
 	break;
       default:
 	fprintf(stderr,"[%s] unhandled error code: %#x\n",__func__,status);
 	abort();
       }
-      if (status!=GSL_SUCCESS) break;      
+      if (status!=GSL_SUCCESS) break;
     }
+    //sensitivity_approximation(&solution[i]);
+    if (h5f){
+      gsl_matrix_to_h5(solution[i]->y,g_id,"state");
+      gsl_vector_to_h5(solution[i]->t,g_id,"time",NULL);
+      ndarray_to_h5(solution[i]->Jy,g_id,"jac");
+      ndarray_to_h5(solution[i]->Jp,g_id,"jacp");
+      H5Gclose(g_id);
+    }    
     printf("\n\n");
   }
+  return solution;
 }
 
 char *first_so(){
@@ -217,13 +254,24 @@ double* read_tspan(char *val){
   return t;
 }
 
+gsl_matrix* transition_matrix(gsl_matrix *PHI, double t, double t0){
+  return PHI;
+}
+
+ndarray* sensitivity_approximation(solution_t *solution){
+  
+  return NULL;
+}
+
+
+
 
 int main(int argc, char *argv[]){
   int i=0;
   char *model_name=NULL, *h5file=NULL;
   double abs_tol=1e-6,rel_tol=1e-5,h=1e-3;
   double *t=NULL;
-
+  ndarray_test();
   for (i=1;i<argc;i++){
     fprintf(stderr,"[%s] %s=%s\n",__func__,argv[i],argv[i+1]);
     if (option_is("-m","--model",argv[i])){
@@ -280,17 +328,25 @@ int main(int argc, char *argv[]){
   gsl_vector_view u=gsl_vector_subvector(par,mu->size,nu);
   gsl_vector_memcpy(&(p.vector),mu);
   for (i=0;i<mu->size;i++) par->data[i]=exp(par->data[i]);
-
-  gsl_odeiv2_system sys = load_system(model_name, d, par->data);
-
-  const gsl_odeiv2_step_type * T=gsl_odeiv2_step_rk8pd;//gsl_odeiv2_step_msbdf;
+  jacp dfdp;
+  gsl_odeiv2_system sys = load_system(model_name, d, par->data, &dfdp);
+  //test evaluation:
+  int jacp_size=d*par->size;
+  double *J=malloc(sizeof(double)*jacp_size);
+  gsl_vector_memcpy(&(u.vector),sim[0].u);
+  dfdp(0,sim[0].y0->data,J,par->data);
+  fprintf(stderr,"[%s] test evaluation of jacp",__func__);
+  for (i=0;i<jacp_size;i++) fprintf(stderr,"%g ",J[i]);
+  fprintf(stderr,"\n\n");
+  const gsl_odeiv2_step_type * T=gsl_odeiv2_step_msbdf;
   gsl_odeiv2_driver *driver=gsl_odeiv2_driver_alloc_y_new(&sys,T,h,abs_tol,rel_tol);
-
-  
+  char *h5out_name = model_function(model_name,"_out.h5");
+  hid_t h5f = H5Fcreate(h5out_name,H5F_ACC_TRUNC,H5P_DEFAULT,H5P_DEFAULT);
+  assert(h5f);
   // the most CPU work happens here:
-  simulate(driver,sim,N,t,&(u.vector));
 
+  solution_t **solution=simulate(sys,driver,sim,N,t,&(u.vector),par,dfdp,h5f);
   gsl_odeiv2_driver_free(driver);
-
+  H5Fclose(h5f);
   return EXIT_SUCCESS;
 }
