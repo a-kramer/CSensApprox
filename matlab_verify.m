@@ -25,7 +25,8 @@ for i=1:nG
  odeset('BDF',true);
  %tspan=[min(t) max(t)];
  [T,Y]=ode15s(f,t,y0);
- fprintf("difference in the trajectory: %g\n",norm(Y-cy'));
+ fprintf("difference in the trajectory, aggregated: %g\nand per state variable:\n",norm(Y-cy')/norm(Y));
+ disp(sum(abs(Y-cy'),1)./sum(abs(Y),1));
  %disp(Y-cy');
  ny=length(y0);
  nt=length(t);
@@ -35,8 +36,8 @@ for i=1:nG
   mjac(:,:,j)=Jy(t(j),Y(j,:)');
   mjacp(:,:,j)=Jp(t(j),Y(j,:)');
  end%for
- fprintf("diff between C_jacobian and matlab_jacobian: %g\n",norm(sum(abs(mjac-permute(cjac,[2,1,3])),3)));
- fprintf("diff between C_p_jacobian and matlab_p_jacobian: %g\n",norm(sum(abs(mjacp-permute(cjacp,[2,1,3])),3)));
+ fprintf("diff between C_jacobian and matlab_jacobian: %g\n",norm(sum(abs(mjac-permute(cjac,[2,1,3])),3))./norm(sum(abs(mjac),3)));
+ fprintf("diff between C_p_jacobian and matlab_p_jacobian: %g\n",norm(sum(abs(mjacp-permute(cjacp,[2,1,3])),3))./norm(sum(abs(mjacp),3)));
  %figure(i);
  %plot(T,Y);
  %xlabel('t');
