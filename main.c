@@ -126,25 +126,32 @@ void fix_tspan_if_necessary(gsl_vector *t, double *tspan){
 
 }
 
-
 gsl_matrix* transition_matrix(gsl_matrix *Ji, gsl_matrix *Jf, double ti, double tf){
   double s=0.5*(tf-ti);
   double b=0.0;
   size_t ny=Ji->size1;
-  gsl_matrix *identity=gsl_matrix_alloc(ny,ny);
+  gsl_matrix *I=gsl_matrix_alloc(ny,ny);   // I_{ n }(tf,ti)
+  gsl_matrix *I1=gsl_matrix_alloc(ny,ny);  // I_{n+1}(tf,ti)
   gsl_matrix *PHI=gsl_matrix_alloc(ny,ny);
+
   gsl_matrix_set_identity(PHI);
-  gsl_matrix_set_identity(identity);
   int i,n=3;
+  // I1
+  gsl_matrix_memcpy(I,Jf);
+  gsl_matrix_add(I,Ji);
+  gsl_matrix_scale(I,s);
+  
   for (i=0;i<n;i++){
-    // PHI = s*Jf*PHI + b*PHI + I:
-    gsl_blas_dgemm(CblasNoTrans,CblasNoTrans, s, Jf, PHI, b, PHI);
-    gsl_matrix_add(PHI,identity);
+    gsl_matrix_add(PHI,I);
+    // C = s*A*B + b*C   [dgemm]
+    gsl_blas_dgemm(CblasNoTrans,CblasNoTrans, s, Jf, I, b, I1);
+    gsl_matrix_memcpy(I,I1);
   }
-  gsl_matrix_free(identity);
+  gsl_matrix_free(I);
+  gsl_matrix_free(I1);
   return PHI;
 }
-     
+
 void sensitivity_approximation(solution_t *solution){
   assert(solution && solution->Jp && solution->Jy && solution->t);
 
@@ -154,7 +161,7 @@ void sensitivity_approximation(solution_t *solution){
   int index[3]={0,0,0};
   int j;
   double tf, ti;
-  gsl_matrix_view Sf,Si,Ji,Jf,B;
+  gsl_matrix_view Sf,Si,Ji,Jf,Bf,Bi;
   gsl_matrix *PHI_fwd, *PHI_bwd;
   gsl_matrix *S_temp=gsl_matrix_alloc(ny,np);
   assert(S_temp);
@@ -163,20 +170,21 @@ void sensitivity_approximation(solution_t *solution){
     index[2]=j; // time index
     Sf = gsl_matrix_view_array(ndarray_ptr(solution->Sy,index),ny,np);
     Jf=gsl_matrix_view_array(ndarray_ptr(solution->Jy,index),ny,ny);
-    B=gsl_matrix_view_array(ndarray_ptr(solution->Jp,index),ny,np);
+    Bf=gsl_matrix_view_array(ndarray_ptr(solution->Jp,index),ny,np);
     tf=gsl_vector_get(solution->t,j);
     
     index[2]=j-1; // previous time index
     Si = gsl_matrix_view_array(ndarray_ptr(solution->Sy,index),ny,np);
     Ji=gsl_matrix_view_array(ndarray_ptr(solution->Jy,index),ny,ny);
+    Bi=gsl_matrix_view_array(ndarray_ptr(solution->Jp,index),ny,np);
     ti=gsl_vector_get(solution->t,j-1);
 
     PHI_fwd = transition_matrix(&Ji.matrix,&Jf.matrix,ti,tf);
-    PHI_bwd = transition_matrix(&Ji.matrix,&Jf.matrix,tf,ti);
-    // Sf = PHI(k+1,k) * (0.5*(PHI(k,k+1)*B(k) + B(k)) + Si )
-    gsl_blas_dgemm(CblasNoTrans,CblasNoTrans, 1.0, PHI_bwd, &B.matrix, 0.0, S_temp);
-    gsl_matrix_add(S_temp,&B.matrix);
-    gsl_matrix_scale(S_temp,0.5);
+    PHI_bwd = transition_matrix(&Jf.matrix,&Ji.matrix,tf,ti);
+    // Sf = PHI(k+1,k) * (0.5*dt*(PHI(k,k+1)*B(k+1) + B(k)) + Si )
+    gsl_blas_dgemm(CblasNoTrans,CblasNoTrans, 1.0, PHI_bwd, &Bf.matrix, 0.0, S_temp);
+    gsl_matrix_add(S_temp,&Bi.matrix);
+    gsl_matrix_scale(S_temp,0.5*(tf-ti));
     gsl_matrix_add(S_temp,&Si.matrix);
     gsl_blas_dgemm(CblasNoTrans,CblasNoTrans, 1.0, PHI_fwd, S_temp, 0.0, &Sf.matrix);
   }

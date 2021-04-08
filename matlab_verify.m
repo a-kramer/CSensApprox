@@ -1,5 +1,5 @@
-model_g = h5info('CaMKIIs.h5')
-output_g = h5info('CaMKIIs_out.h5')
+model_g = h5info('CaMKIIs.h5');
+output_g = h5info('CaMKIIs_out.h5');
 addpath("~/Documents/CaMKIIs/matlab");
 
 nG=length(output_g.Groups);
@@ -20,6 +20,9 @@ for i=1:nG
  Jy=@(t,y) CaMKIIs_jac(t,y,p);
  Jp=@(t,y) CaMKIIs_jacp(t,y,p);
  odeset('jacobian',Jy);
+ odeset('RelTol',1e-5);
+ odeset('AbsTol',1e-6);
+ odeset('BDF',true);
  %tspan=[min(t) max(t)];
  [T,Y]=ode15s(f,t,y0);
  fprintf("difference in the trajectory: %g\n",norm(Y-cy'));
@@ -32,8 +35,8 @@ for i=1:nG
   mjac(:,:,j)=Jy(t(j),Y(j,:)');
   mjacp(:,:,j)=Jp(t(j),Y(j,:)');
  end%for
- fprintf("diff between C_jacobian and matlab_jacobian: %g\n",norm(sum(mjac-permute(cjac,[2,1,3]),3)));
- fprintf("diff between C_p_jacobian and matlab_p_jacobian: %g\n",norm(sum(mjacp-permute(cjacp,[2,1,3]),3)));
+ fprintf("diff between C_jacobian and matlab_jacobian: %g\n",norm(sum(abs(mjac-permute(cjac,[2,1,3])),3)));
+ fprintf("diff between C_p_jacobian and matlab_p_jacobian: %g\n",norm(sum(abs(mjacp-permute(cjacp,[2,1,3])),3)));
  %figure(i);
  %plot(T,Y);
  %xlabel('t');
