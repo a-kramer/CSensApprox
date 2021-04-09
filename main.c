@@ -29,19 +29,33 @@ typedef struct {
 typedef int(*jacp)(double, const double [], double *, void *);
 
 
-char* model_function(char *model_name, char *suffix){
+/*This function allocates memory and concatenates two strings in that
+  memory. It is used to make function names (this is for loading the model
+  functions by name from a shared library). The model function names
+  have this pattern: `MODEL_vf`, `MODEL_jac`, `MODEL_jacp`.*/
+char* /* string with model_name and suffix (free after loading the function) */
+model_function(char *model_name, /* the base name of the model */
+ char *suffix) /* suffix, usually `"_vf"` or `"_jac"` */
+{
   assert(model_name);
   size_t size=(strlen(model_name)+strlen(suffix)+1);
   assert(size);
   char *f=malloc(sizeof(char)*size);
   assert(f);
-  //*((char *) mempcpy(mempcpy(f,model_name,strlen(model_name)),suffix,strlen(suffix)))='\0';
   strcat(strcpy(f,model_name),suffix);
   fprintf(stderr,"[%s] «%s»\n",__func__,f); fflush(stderr);
   return f;
 }
 
-void *load_or_exit(void *lib, char *name, int opt){
+
+/* Loads a function from an `.so` file, using `dlsym()`. If dlsym
+   fails to find the file `abort()` is called. Optionally, this
+   function frees the storage assosiated with the name of the
+   function.*/
+void *load_or_exit(void *lib, /* file pointer, previously opened via `dlopen()` */
+ char *name, /* function to be loaded from file */
+ int opt) /* whether to call `free()` on `name` (either: `KEEP_ON_SUCCESS` or `FREE_ON_SUCCESS`). */
+{
   assert(lib && name);
   void *symbol=dlsym(lib,name);
   if (symbol) {
@@ -56,7 +70,18 @@ void *load_or_exit(void *lib, char *name, int opt){
   return symbol;
 }
 
-gsl_odeiv2_system load_system(char *model_name, size_t n, double *p, jacp *dfdp){
+
+/* Loads the ODE system from an `.so` file, the file is given by name,
+   the returned structure is intended for the `gsl_odeiv2` library of
+   solvers. The jacobian dfdx is loaded alongside the right hand side;
+   `gsl_odeiv2_system` has no slot for the parameter derivative `dfdp`,
+   this is returned as a function pointer instead. */
+gsl_odeiv2_system /* the system structure, see gsl documentation. */
+load_system(char *model_name, /* the file-name will be constructed from this name, possibly from @link first_so@ */
+ size_t n, /* number of state variables */
+ double *p, /* default parameter vector */
+ jacp *dfdp) /* [output] additional return value: a pointer to the parameter derivative (matrix) function. */
+{
   char *so=model_function(model_name,".so");
   char *local_so = model_function("./",so);
   void *lib=dlopen(local_so,RTLD_LAZY);
@@ -81,7 +106,15 @@ gsl_odeiv2_system load_system(char *model_name, size_t n, double *p, jacp *dfdp)
   return sys;
 }
 
-int option_is(char *s, char *l, char *value){
+
+/* A command line option has the pattern `"-o"` or `"--option"`. This
+   function checks whether a given string `value` is the name of a
+   short option `s` or long option `l`.*/
+int /* returns `1` if the given string is the specified option, `0` otherwise */
+option_is(char *s, /* short option name, e.g.: "-t", can be NULL */
+ char *l, /* long option name, e.g.: "--time", can also be NULL */
+ char *value) /* a string for comaprison with s and l*/
+{
   int match=FALSE;
   assert(value);
   if (s) match=(strcmp(value,s)==0);
@@ -89,7 +122,17 @@ int option_is(char *s, char *l, char *value){
   return match;
 }
 
-herr_t load_one_sim(hid_t g_id, const char *name, const H5L_info_t *info, void *op_data){
+
+/* loads the simulation instructions from an hdf5 file, contained in
+   an hdf5 group (g_id). Simulation instructions are: the initial
+   value, the input parameters, and time scale of the problem. This
+   function has the interface the is required for `H5Literate()`. */
+herr_t /* a nonnegative value is interpreted as success by the hdf5 library. */
+load_one_sim(hid_t g_id, /* the group identifier, this group holds the simulation instructions*/
+ const char *name, /* the name of the group */
+ const H5L_info_t *info, /* hdf5 specific object (not used) */
+ void *op_data) /* [OUT] an array of simulation structures. */
+{
   gsl_vector *u = h5_to_gsl(g_id,name,"input");
   gsl_vector *y0 = h5_to_gsl(g_id,name,"InitialValue");
   gsl_vector *t = h5_to_gsl(g_id,name,"time");
@@ -105,7 +148,13 @@ herr_t load_one_sim(hid_t g_id, const char *name, const H5L_info_t *info, void *
   return 0;
 }
 
-simulation_t* sim_from_h5(hid_t g_id, hsize_t *N){
+
+/* Loads all simulation instructions (experiment
+   descriptions/protocols) from an hdf5 file using `H5Literate()` */
+simulation_t* /* returns `N` simulations as a structure array (allocated via `malloc()`) */
+sim_from_h5(hid_t g_id, /* group id, location id of all simulation DATASETS */
+ hsize_t *N) /* [OUT] additionally returns the number of specified simulations `N`. */
+{
   herr_t h5ec=H5Gget_num_objs(g_id,N);
   assert(h5ec>=0);
   fprintf(stderr,"[%s] number of data sets: %lli\n",__func__,N[0]); fflush(stderr);
@@ -116,7 +165,16 @@ simulation_t* sim_from_h5(hid_t g_id, hsize_t *N){
   return sim;
 }
 
-void fix_tspan_if_necessary(gsl_vector *t, double *tspan){
+
+/* If no simulation time span was specified, it is inferred from the
+   measurement times `t` in the simulation instructions. The `tspan`
+   vector has the same three components as GNU Octave uses to specify
+   a range of numbers: `initial` `increment` `final` (e.g.: `"0:0.1:7"`).
+   If tspan is `[0,0,0]`, then it is corrected to 100 points between `0` and
+   `1.3*max(t)` */
+void fix_tspan_if_necessary(gsl_vector *t, /* measurement time vector (from the data file) */
+ double *tspan) /* 3-element tspan vector to fix */
+{
   assert(tspan);
   double tf=gsl_vector_max(t)*1.3; // a reasonable stop time [default value]
   if (tspan[2]==tspan[0]) tspan[2]=tf;
@@ -126,7 +184,16 @@ void fix_tspan_if_necessary(gsl_vector *t, double *tspan){
 
 }
 
-gsl_matrix* transition_matrix(gsl_matrix *Ji, gsl_matrix *Jf, double ti, double tf){
+
+/* Calculates the transition matrix using a truncated Peano Baker
+   series, and 1-step trapezoidal approximation of integrals: `tf-ti`
+   needs to be small.*/
+gsl_matrix* /* PHI(ti,tf): the transition matrix between ti and tf*/
+transition_matrix(gsl_matrix *Ji, /* the jacobian at t=ti */
+ gsl_matrix *Jf, /* the jacobian at t=tf */
+ double ti, /* initial time of the interval (left bondary) */
+ double tf) /* final time of the interval (right boundary) */
+{
   double s=0.5*(tf-ti);
   double b=0.0;
   size_t ny=Ji->size1;
@@ -135,7 +202,7 @@ gsl_matrix* transition_matrix(gsl_matrix *Ji, gsl_matrix *Jf, double ti, double 
   gsl_matrix *PHI=gsl_matrix_alloc(ny,ny);
 
   gsl_matrix_set_identity(PHI);
-  int i,n=3;
+  int i,n=2;
   // I1
   gsl_matrix_memcpy(I,Jf);
   gsl_matrix_add(I,Ji);
@@ -145,14 +212,18 @@ gsl_matrix* transition_matrix(gsl_matrix *Ji, gsl_matrix *Jf, double ti, double 
     gsl_matrix_add(PHI,I);
     // C = s*A*B + b*C   [dgemm]
     gsl_blas_dgemm(CblasNoTrans,CblasNoTrans, s, Jf, I, b, I1);
-    gsl_matrix_memcpy(I,I1);
+    gsl_matrix_memcpy(I,I1); 
   }
   gsl_matrix_free(I);
   gsl_matrix_free(I1);
   return PHI;
 }
 
-void sensitivity_approximation(solution_t *solution){
+
+/* Calculates the sensitivity matrix using the transition matrix
+   PHI. The approximate sensitivity is stored in the `solution`
+   structure.*/
+void sensitivity_approximation(solution_t *solution)/* solution struct from a numerical solver */{
   assert(solution && solution->Jp && solution->Jy && solution->t);
 
   int np = solution->Jp->size[0];
@@ -167,7 +238,8 @@ void sensitivity_approximation(solution_t *solution){
   assert(S_temp);
 
   for (j=1;j<nt;j++){
-    index[2]=j; // time index
+    gsl_matrix_set_zero(S_temp);
+    index[2]=j; // current time index
     Sf = gsl_matrix_view_array(ndarray_ptr(solution->Sy,index),ny,np);
     Jf=gsl_matrix_view_array(ndarray_ptr(solution->Jy,index),ny,ny);
     Bf=gsl_matrix_view_array(ndarray_ptr(solution->Jp,index),ny,np);
@@ -192,7 +264,21 @@ void sensitivity_approximation(solution_t *solution){
 }
 
 
-solution_t** simulate(gsl_odeiv2_system sys, gsl_odeiv2_driver* driver, simulation_t *sim, hsize_t N, double *tspan, gsl_vector *u, gsl_vector *par, jacp dfdp, hid_t h5f){
+/* Intergrates the system `sys` using the specified `driver` and
+   simulation instructions `sim` (an array of structs, one element per
+   simulation). The results are saved to an hdf5 file and also printed
+   to standard output. */
+solution_t** /* a structure that contains the trajectories y(t) as well as jacobians Jy, Jp and the y-sensitivity (dy/dp).*/
+simulate(gsl_odeiv2_system sys, /* the system to integrate */
+ gsl_odeiv2_driver* driver, /* the driver that is used to integrate `sys` */
+ simulation_t *sim, /*`N` simulation instructions (e.g.: initial value y0)*/
+ hsize_t N, /* number of simulations to perform, length of `sim` */
+ double *tspan, /* time span vector: initial time, increment, final time */
+ gsl_vector *u, /* input vector (a pointer that can be used to change `sys`)*/ 
+ gsl_vector *par, /* parameters of the model, a pointer that can be used to change `sys`.*/
+ jacp dfdp, /* a function that returns the parameter derivative of the model's right hand side function.*/
+ hid_t h5f) /* an hdf5 file opened for writing.*/
+{
   assert(driver && sim && N>0);
   assert(tspan);
   assert(sim);
@@ -279,7 +365,12 @@ solution_t** simulate(gsl_odeiv2_system sys, gsl_odeiv2_driver* driver, simulati
   return solution;
 }
 
-char *first_so(){
+
+/*Finds the first file ending in `.so` in the current working
+  directory. The suffix `.so` is stripped from the file name, the
+  prefix is assumed to be a the model's name.  */
+char* /* the name of the found model, NULL if no file was found.*/
+first_so(){
   char *name = NULL;
   char *p;
   DIR *dp = opendir (".");
@@ -304,7 +395,12 @@ char *first_so(){
   return name;
 }
 
-double* read_tspan(char *val){
+
+/* Interprets a string as a range specification from three values:
+   "initial increment final", the values can be separated by spaces or
+   colons `:`. */
+double* /* a three element array of `double`s */
+read_tspan(char *val)/*a string of the form "a:b:c" or "a b c". */{
   int j;
   char *s,*p;
   double *t=calloc(3,sizeof(double));
@@ -321,7 +417,24 @@ double* read_tspan(char *val){
   return t;
 }
 
-int main(int argc, char *argv[]){
+
+/* This prgram loads an ODE model, specified for the `gsl_odeiv2`
+   library. The initial value problems are specified in an hdf5 file,
+   intended for use in systems biology applications. So, some of the
+   terminology in the expected hdf5 _data_ file is vaguely related to
+   biological systems. All command line arguments are optional and
+   names of files are guessed, based on the contents of the current
+   working directoy. The hdf5 fiel is expected to have a group called
+   "data", this group shall contain hdf5 DATASETS with ATTRIBUTES that
+   describe initial value problems suitable to replicate these
+   datasets: InitialValue, time, and index. Currenty, the model is
+   parameterized using the value of the DATASET *mu*, in the GROUP
+   called *prior*. 
+
+   The possible command line options are documented in the [README.md](../README.md) .
+*/
+int /* `EXIT_SUCESS` if all files are found and integration succeeds, default `abort()` signal otherwise.*/
+main(int argc, char *argv[]){
   int i=0;
   char *model_name=NULL, *h5file=NULL;
   double abs_tol=1e-6,rel_tol=1e-5,h=1e-3;

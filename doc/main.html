@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<!-- SECTION: main program -->
+<head>
+<title>CSensApprox Code Documentation</title>
+<meta name="keywords" content="main program">
+<meta http-equiv="Content-Type" content="text/html;charset=utf-8">
+<meta name="generator" content="codedoc v3.6">
+<meta name="author" content="Andrei Kramer &lt;andreikr@kth.se&gt;">
+<meta name="language" content="en-US">
+<meta name="copyright" content="CC BY 4.0">
+<meta name="version" content="0.1">
+<style type="text/css"><!--
+body, p, h1, h2, h3, h4, h5, h6 {
+    font-family: Fira Sans, sans-serif;
+    color: rgb(160,160,160);
+    background: rgb(40,40,40);
+}
+
+body {
+ font-size: 14pt;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-weight: bold;
+  page-break-inside: avoid;
+}
+h1 {
+  font-size: 200%;
+  margin: 0;
+}
+h2 {
+  font-size: 200%;
+  margin-top: 1.5em;
+}
+h3 {
+  font-size: 150%;
+  margin-bottom: 0.5em;
+  margin-top: 1.5em;
+}
+h4 {
+  font-size: 120%;
+  margin-bottom: 0.5em;
+  margin-top: 1.5em;
+}
+h5 {
+  font-size: 110%;
+  margin-bottom: 0.5em;
+  margin-top: 1.5em;
+}
+h6 {
+  font-size: 105%;
+  margin-bottom: 0.5em;
+  margin-top: 1.5em;
+}
+div.header h1, div.header p {
+  text-align: center;
+}
+div.contents, div.body, div.footer {
+  page-break-before: always;
+}
+.class, .enumeration, .function, .struct, .typedef, .union {
+  border-bottom: solid 2px gray;
+}
+.description {
+  margin-top: 0.5em;
+}
+.function {
+  margin-bottom: 0;
+}
+blockquote {
+  border: solid thin gray;
+  box-shadow: 3px 3px 5px rgba(0,0,0,0.5);
+  padding: 0px 10px;
+  page-break-inside: avoid;
+}
+p code, li code, p.code, pre, ul.code li {
+  background: rgba(127,127,127,0.1);
+  border: thin dotted gray;
+  font-family: Fira Code, monospace;
+  font-size: 100%;
+  hyphens: manual;
+  -webkit-hyphens: manual;
+  page-break-inside: avoid;
+}
+p.code, pre, ul.code li {
+  padding: 10px;
+}
+p code, li code {
+  padding: 2px 5px;
+}
+a:link {
+  text-decoration: none;
+  color: rgb(100,100,240);
+}
+a:visited {
+  color: rgb(200,80,200);
+}
+span.info {
+  background: black;
+  border: solid thin black;
+  color: white;
+  font-size: 80%;
+  font-style: italic;
+  font-weight: bold;
+  white-space: nowrap;
+}
+h1 span.info, h2 span.info, h3 span.info, h4 span.info {
+  border-top-left-radius: 10px;
+  border-top-right-radius: 10px;
+  float: right;
+  padding: 3px 6px;
+}
+ul.code, ul.contents, ul.subcontents {
+  list-style-type: none;
+  margin: 0;
+  padding-left: 0;
+}
+ul.code li {
+  margin: 0;
+}
+ul.contents > li {
+  margin-top: 1em;
+}
+ul.contents li ul.code, ul.contents li ul.subcontents {
+  padding-left: 2em;
+}
+table {
+  border-collapse: collapse;
+  border-spacing: 0;
+}
+td {
+  border: solid 1px #666;
+  padding: 5px 10px;
+  vertical-align: top;
+}
+td.left {
+  text-align: left;
+}
+td.center {
+  text-align: center;
+}
+td.right {
+  text-align: right;
+}
+th {
+  border-bottom: solid 2px #000;
+  padding: 1px 5px;
+  text-align: center;
+  vertical-align: bottom;
+}
+tr:nth-child(odd) {
+  background: rgba(127,127,127,0.1);
+}
+table.list {
+  border-collapse: collapse;
+  width: 100%;
+}
+table.list th {
+  border-bottom: none;
+  border-right: 2px solid gray;
+  font-family: monospace;
+  padding: 5px 10px 5px 2px;
+  text-align: right;
+  vertical-align: top;
+}
+table.list td {
+  border: none;
+  padding: 5px 2px 5px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+h2.title, h3.title {
+  border-bottom: solid 2px black;
+}
+--></style>
+</head>
+<body>
+<div class="header">
+<h1 class="title">CSensApprox Code Documentation</h1>
+<p>Andrei Kramer &lt;andreikr@kth.se&gt;</p>
+<p>CC BY 4.0</p>
+</div>
+<div class="contents">
+<h2 class="title">Contents</h2>
+<ul class="contents">
+<li><a href="#FUNCTIONS">Functions</a><ul class="subcontents">
+<li><a href="#first_so">first_so</a></li>
+<li><a href="#fix_tspan_if_necessary">fix_tspan_if_necessary</a></li>
+<li><a href="#load_one_sim">load_one_sim</a></li>
+<li><a href="#load_or_exit">load_or_exit</a></li>
+<li><a href="#load_system">load_system</a></li>
+<li><a href="#main">main</a></li>
+<li><a href="#model_function">model_function</a></li>
+<li><a href="#option_is">option_is</a></li>
+<li><a href="#read_tspan">read_tspan</a></li>
+<li><a href="#sensitivity_approximation">sensitivity_approximation</a></li>
+<li><a href="#sim_from_h5">sim_from_h5</a></li>
+<li><a href="#simulate">simulate</a></li>
+<li><a href="#transition_matrix">transition_matrix</a></li>
+</ul></li>
+</ul>
+</div>
+<div class="body">
+<h2 class="title"><a id="FUNCTIONS">Functions</a></h2>
+<h3 class="function"><a id="first_so">first_so</a></h3>
+<p class="description">Finds the first file ending in <code>.so</code> in the current working
+directory. The suffix <code>.so</code> is stripped from the file name, the
+prefix is assumed to be a the model's name.</p>
+<p class="code">
+char *first_so(void);</p>
+<h4 class="returnvalue">Return Value</h4>
+<p class="description">the name of the found model, NULL if no file was found.</p>
+<h3 class="function"><a id="fix_tspan_if_necessary">fix_tspan_if_necessary</a></h3>
+<p class="description">If no simulation time span was specified, it is inferred from the
+measurement times <code>t</code> in the simulation instructions. The <code>tspan</code>
+vector has the same three components as GNU Octave uses to specify
+a range of numbers: <code>initial</code> <code>increment</code> <code>final</code> (e.g.: <code>"0:0.1:7"</code>).
+If tspan is <code>[0,0,0]</code>, then it is corrected to 100 points between <code>0</code> and
+<code>1.3*max(t)</code></p>
+<p class="code">
+void fix_tspan_if_necessary(gsl_vector *t, double *tspan);</p>
+<h4 class="parameters">Parameters</h4>
+<table class="list"><tbody>
+<tr><th>t</th>
+<td class="description">measurement time vector (from the data file)</td></tr>
+<tr><th>tspan</th>
+<td class="description">3-element tspan vector to fix</td></tr>
+</tbody></table>
+<h3 class="function"><a id="load_one_sim">load_one_sim</a></h3>
+<p class="description">loads the simulation instructions from an hdf5 file, contained in
+an hdf5 group (g_id). Simulation instructions are: the initial
+value, the input parameters, and time scale of the problem. This
+function has the interface the is required for <code>H5Literate()</code>.</p>
+<p class="code">
+herr_t load_one_sim(hid_t g_id, const char *name, const H5L_info_t *info, void *op_data);</p>
+<h4 class="parameters">Parameters</h4>
+<table class="list"><tbody>
+<tr><th>g_id</th>
+<td class="description">the group identifier, this group holds the simulation instructions</td></tr>
+<tr><th>name</th>
+<td class="description">the name of the group</td></tr>
+<tr><th>info</th>
+<td class="description">hdf5 specific object (not used)</td></tr>
+<tr><th>op_data</th>
+<td class="description">[OUT] an array of simulation structures.</td></tr>
+</tbody></table>
+<h4 class="returnvalue">Return Value</h4>
+<p class="description">a nonnegative value is interpreted as success by the hdf5 library.</p>
+<h3 class="function"><a id="load_or_exit">load_or_exit</a></h3>
+<p class="description"></p>
+<p class="code">
+void *load_or_exit(void *lib, char *name, int opt);</p>
+<h4 class="parameters">Parameters</h4>
+<table class="list"><tbody>
+<tr><th>lib</th>
+<td class="description">file pointer, previously opened via <code>dlopen()</code></td></tr>
+<tr><th>name</th>
+<td class="description">function to be loaded from file</td></tr>
+<tr><th>opt</th>
+<td class="description">whether to call <code>free()</code> on <code>name</code> (either: <code>KEEP_ON_SUCCESS</code> or <code>FREE_ON_SUCCESS</code>).</td></tr>
+</tbody></table>
+<h4 class="returnvalue">Return Value</h4>
+<p class="description">Loads a function from an <code>.so</code> file, using <code>dlsym()</code>. If dlsym
+fails to find the file <code>abort()</code> is called. Optionally, this
+function frees the storage assosiated with the name of the
+function.</p>
+<h3 class="function"><a id="load_system">load_system</a></h3>
+<p class="description">Loads the ODE system from an <code>.so</code> file, the file is given by name,
+the returned structure is intended for the <code>gsl_odeiv2</code> library of
+solvers. The jacobian dfdx is loaded alongside the right hand side;
+<code>gsl_odeiv2_system</code> has no slot for the parameter derivative <code>dfdp</code>,
+this is returned as a function pointer instead.</p>
+<p class="code">
+gsl_odeiv2_system load_system(char *model_name, size_t n, double *p, jacp *dfdp);</p>
+<h4 class="parameters">Parameters</h4>
+<table class="list"><tbody>
+<tr><th>model_name</th>
+<td class="description">the file-name will be constructed from this name, possibly from <a href="#first_so"><code>first_so</code></a></td></tr>
+<tr><th>n</th>
+<td class="description">number of state variables</td></tr>
+<tr><th>p</th>
+<td class="description">default parameter vector</td></tr>
+<tr><th>dfdp</th>
+<td class="description">[output] additional return value: a pointer to the parameter derivative (matrix) function.</td></tr>
+</tbody></table>
+<h4 class="returnvalue">Return Value</h4>
+<p class="description">the system structure, see gsl documentation.</p>
+<h3 class="function"><a id="main">main</a></h3>
+<p class="description">This prgram loads an ODE model, specified for the <code>gsl_odeiv2</code>
+library. The initial value problems are specified in an hdf5 file,
+intended for use in systems biology applications. So, some of the
+terminology in the expected hdf5 _data_ file is vaguely related to
+biological systems. All command line arguments are optional and
+names of files are guessed, based on the contents of the current
+working directoy. The hdf5 fiel is expected to have a group called
+&quot;data&quot;, this group shall contain hdf5 DATASETS with ATTRIBUTES that
+describe initial value problems suitable to replicate these
+datasets: InitialValue, time, and index. Currenty, the model is
+parameterized using the value of the DATASET <em>mu</em>, in the GROUP
+called <em>prior</em>. </p>
+<p class="code">
+int main(int argc, char *argv[]);</p>
+<h4 class="parameters">Parameters</h4>
+<table class="list"><tbody>
+<tr><th>argc</th>
+</tr>
+<tr><th>argv[]</th>
+</tr>
+</tbody></table>
+<h4 class="returnvalue">Return Value</h4>
+<p class="description"><code>EXIT_SUCESS</code> if all files are found and integration succeeds, default <code>abort()</code> signal otherwise.</p>
+<h4 class="discussion">Discussion</h4>
+<p class="discussion">The possible command line options are documented in the <a href="../README.md">README.md</a> .</p>
+<h3 class="function"><a id="model_function">model_function</a></h3>
+<p class="description">This function allocates memory and concatenates two strings in that
+memory. It is used to make function names (this is for loading the model
+functions by name from a shared library). The model function names
+have this pattern: <code>MODEL_vf</code>, <code>MODEL_jac</code>, <code>MODEL_jacp</code>.</p>
+<p class="code">
+char *model_function(char *model_name, char *suffix);</p>
+<h4 class="parameters">Parameters</h4>
+<table class="list"><tbody>
+<tr><th>model_name</th>
+<td class="description">the base name of the model</td></tr>
+<tr><th>suffix</th>
+<td class="description">suffix, usually <code>"_vf"</code> or <code>"_jac"</code></td></tr>
+</tbody></table>
+<h4 class="returnvalue">Return Value</h4>
+<p class="description">string with model_name and suffix (free after loading the function)</p>
+<h3 class="function"><a id="option_is">option_is</a></h3>
+<p class="description">A command line option has the pattern <code>"-o"</code> or <code>"--option"</code>. This
+function checks whether a given string <code>value</code> is the name of a
+short option <code>s</code> or long option <code>l</code>.</p>
+<p class="code">
+int option_is(char *s, char *l, char *value);</p>
+<h4 class="parameters">Parameters</h4>
+<table class="list"><tbody>
+<tr><th>s</th>
+<td class="description">short option name, e.g.: &quot;-t&quot;, can be NULL</td></tr>
+<tr><th>l</th>
+<td class="description">long option name, e.g.: &quot;--time&quot;, can also be NULL</td></tr>
+<tr><th>value</th>
+<td class="description">a string for comaprison with s and l</td></tr>
+</tbody></table>
+<h4 class="returnvalue">Return Value</h4>
+<p class="description">returns <code>1</code> if the given string is the specified option, <code>0</code> otherwise</p>
+<h3 class="function"><a id="read_tspan">read_tspan</a></h3>
+<p class="description">Interprets a string as a range specification from three values:
+&quot;initial increment final&quot;, the values can be separated by spaces or
+colons <code>:</code>.</p>
+<p class="code">
+double *read_tspan(char *val);</p>
+<h4 class="parameters">Parameters</h4>
+<table class="list"><tbody>
+<tr><th>val</th>
+<td class="description">a string of the form &quot;a:b:c&quot; or &quot;a b c&quot;.</td></tr>
+</tbody></table>
+<h4 class="returnvalue">Return Value</h4>
+<p class="description">a three element array of <code>double</code>s</p>
+<h3 class="function"><a id="sensitivity_approximation">sensitivity_approximation</a></h3>
+<p class="description">Calculates the sensitivity matrix using the transition matrix
+PHI. The approximate sensitivity is stored in the <code>solution</code>
+structure.</p>
+<p class="code">
+void sensitivity_approximation(solution_t *solution);</p>
+<h4 class="parameters">Parameters</h4>
+<table class="list"><tbody>
+<tr><th>solution</th>
+<td class="description">solution struct from a numerical solver</td></tr>
+</tbody></table>
+<h3 class="function"><a id="sim_from_h5">sim_from_h5</a></h3>
+<p class="description">Loads all simulation instructions (experiment
+descriptions/protocols) from an hdf5 file using <code>H5Literate()</code></p>
+<p class="code">
+<a href="#simulation_t">simulation_t</a> *sim_from_h5(hid_t g_id, hsize_t *N);</p>
+<h4 class="parameters">Parameters</h4>
+<table class="list"><tbody>
+<tr><th>g_id</th>
+<td class="description">group id, location id of all simulation DATASETS</td></tr>
+<tr><th>N</th>
+<td class="description">[OUT] additionally returns the number of specified simulations <code>N</code>.</td></tr>
+</tbody></table>
+<h4 class="returnvalue">Return Value</h4>
+<p class="description">returns <code>N</code> simulations as a structure array (allocated via <code>malloc()</code>)</p>
+<h3 class="function"><a id="simulate">simulate</a></h3>
+<p class="description">Intergrates the system <code>sys</code> using the specified <code>driver</code> and
+simulation instructions <code>sim</code> (an array of structs, one element per
+simulation). The results are saved to an hdf5 file and also printed
+to standard output.</p>
+<p class="code">
+solution_t **simulate(gsl_odeiv2_system sys, gsl_odeiv2_driver *driver, <a href="#simulation_t">simulation_t</a> *sim, hsize_t N, double *tspan, gsl_vector *u, gsl_vector *par, jacp dfdp, hid_t h5f);</p>
+<h4 class="parameters">Parameters</h4>
+<table class="list"><tbody>
+<tr><th>sys</th>
+<td class="description">the system to integrate</td></tr>
+<tr><th>driver</th>
+<td class="description">the driver that is used to integrate <code>sys</code></td></tr>
+<tr><th>sim</th>
+<td class="description"><code>N</code> simulation instructions (e.g.: initial value y0)</td></tr>
+<tr><th>N</th>
+<td class="description">number of simulations to perform, length of <code>sim</code></td></tr>
+<tr><th>tspan</th>
+<td class="description">time span vector: initial time, increment, final time</td></tr>
+<tr><th>u</th>
+<td class="description">input vector (a pointer that can be used to change <code>sys</code>)</td></tr>
+<tr><th>par</th>
+<td class="description">parameters of the model, a pointer that can be used to change <code>sys</code>.</td></tr>
+<tr><th>dfdp</th>
+<td class="description">a function that returns the parameter derivative of the model's right hand side function.</td></tr>
+<tr><th>h5f</th>
+<td class="description">an hdf5 file opened for writing.</td></tr>
+</tbody></table>
+<h4 class="returnvalue">Return Value</h4>
+<p class="description">a structure that contains the trajectories y(t) as well as jacobians Jy, Jp and the y-sensitivity (dy/dp).</p>
+<h3 class="function"><a id="transition_matrix">transition_matrix</a></h3>
+<p class="description">Calculates the transition matrix using a truncated Peano Baker
+series, and 1-step trapezoidal approximation of integrals: <code>tf-ti</code>
+needs to be small.</p>
+<p class="code">
+gsl_matrix *transition_matrix(gsl_matrix *Ji, gsl_matrix *Jf, double ti, double tf);</p>
+<h4 class="parameters">Parameters</h4>
+<table class="list"><tbody>
+<tr><th>Ji</th>
+<td class="description">the jacobian at t=ti</td></tr>
+<tr><th>Jf</th>
+<td class="description">the jacobian at t=tf</td></tr>
+<tr><th>ti</th>
+<td class="description">initial time of the interval (left bondary)</td></tr>
+<tr><th>tf</th>
+<td class="description">final time of the interval (right boundary)</td></tr>
+</tbody></table>
+<h4 class="returnvalue">Return Value</h4>
+<p class="description">PHI(ti,tf): the transition matrix between ti and tf</p>
+</div>
+</body>
+</html>
