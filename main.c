@@ -188,7 +188,7 @@ void fix_tspan_if_necessary(gsl_vector *t, /* measurement time vector (from the 
 /* Calculates the transition matrix using a truncated Peano Baker
    series, and 1-step trapezoidal approximation of integrals: `tf-ti`
    needs to be small.*/
-gsl_matrix* /* PHI(ti,tf): the transition matrix between ti and tf*/
+gsl_matrix* /* PHI(tf,ti): the transition matrix between ti and tf*/
 transition_matrix(gsl_matrix *Ji, /* the jacobian at t=ti */
  gsl_matrix *Jf, /* the jacobian at t=tf */
  double ti, /* initial time of the interval (left bondary) */
@@ -210,12 +210,51 @@ transition_matrix(gsl_matrix *Ji, /* the jacobian at t=ti */
   
   for (i=0;i<n;i++){
     gsl_matrix_add(PHI,I);
-    // C = s*A*B + b*C   [dgemm]
+    // C = s*A*B + b*C   [dgemm] s is DeltaT*0.5 and b is 0
     gsl_blas_dgemm(CblasNoTrans,CblasNoTrans, s, Jf, I, b, I1);
     gsl_matrix_memcpy(I,I1); 
   }
   gsl_matrix_free(I);
   gsl_matrix_free(I1);
+  return PHI;
+}
+
+/* Calculates the transition matrix using a truncated Peano Baker
+   series, and 1-step trapezoidal approximation of integrals: `tf-ti`
+   needs to be small.*/
+gsl_matrix* /* PHI(tf,ti): the transition matrix between ti and tf*/
+transition_matrix_v2(gsl_matrix *Ji, /* the jacobian at t=ti */
+ gsl_matrix *Jf, /* the jacobian at t=tf */
+ double ti, /* initial time of the interval (left bondary) */
+ double tf) /* final time of the interval (right boundary) */
+{
+  double s=0.5*(tf-ti);
+  size_t ny=Ji->size1;
+  int i,n=2;
+  gsl_matrix *V=gsl_matrix_alloc(ny,ny);
+  gsl_matrix *W=gsl_matrix_alloc(ny,ny);
+  gsl_matrix *I0=gsl_matrix_alloc(ny,ny); // I0(tf;ti) = identity;
+  gsl_matrix *I1=gsl_matrix_alloc(ny,ny); // I1(tf;ti) = 0.5*(tf-ti)*(Jf+Ji)
+  gsl_matrix *PHI=gsl_matrix_alloc(ny,ny); // I0 + I1(tf;ti) + I2(tf;ti) + ...
+  gsl_matrix_set_identity(PHI);
+  gsl_matrix_set_identity(I0);
+  // I1
+  gsl_matrix_memcpy(I1,Jf);
+  gsl_matrix_add(I1,Ji);
+  gsl_matrix_scale(I1,s);
+  gsl_matrix_set_identity(W);
+
+  for (i=0;i<n;i++){
+    gsl_matrix_set_identity(V);
+    gsl_blas_dgemm(CblasNoTrans,CblasNoTrans, s, W, Jf, 1.0, V);
+    gsl_matrix_memcpy(W,V);
+  }
+  gsl_blas_dgemm(CblasNoTrans,CblasNoTrans, 1.0, W, I1, 1.0, PHI);
+
+  gsl_matrix_free(I0);
+  gsl_matrix_free(I1);
+  gsl_matrix_free(V);
+  gsl_matrix_free(W);
   return PHI;
 }
 
@@ -251,8 +290,10 @@ void sensitivity_approximation(solution_t *solution)/* solution struct from a nu
     Bi=gsl_matrix_view_array(ndarray_ptr(solution->Jp,index),ny,np);
     ti=gsl_vector_get(solution->t,j-1);
 
-    PHI_fwd = transition_matrix(&Ji.matrix,&Jf.matrix,ti,tf);
-    PHI_bwd = transition_matrix(&Jf.matrix,&Ji.matrix,tf,ti);
+    PHI_fwd = transition_matrix_v2(&Ji.matrix,&Jf.matrix,ti,tf);
+    PHI_bwd = transition_matrix_v2(&Jf.matrix,&Ji.matrix,tf,ti);
+
+    
     // Sf = PHI(k+1,k) * (0.5*dt*(PHI(k,k+1)*B(k+1) + B(k)) + Si )
     gsl_blas_dgemm(CblasNoTrans,CblasNoTrans, 1.0, PHI_bwd, &Bf.matrix, 0.0, S_temp);
     gsl_matrix_add(S_temp,&Bi.matrix);
