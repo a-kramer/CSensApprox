@@ -249,7 +249,7 @@ transition_matrix_v2(gsl_matrix *Ji, /* the jacobian at t=ti */
     gsl_blas_dgemm(CblasNoTrans,CblasNoTrans, s, W, Jf, 1.0, V);
     gsl_matrix_memcpy(W,V);
   }
-  gsl_blas_dgemm(CblasNoTrans,CblasNoTrans, 1.0, W, I1, 1.0, PHI);
+  gsl_blas_dgemm(CblasNoTrans,CblasNoTrans, 1.0, I1, W, 1.0, PHI);
 
   gsl_matrix_free(I0);
   gsl_matrix_free(I1);
