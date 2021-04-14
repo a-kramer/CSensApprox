@@ -1,0 +1,122 @@
+\documentclass[utf8,english,DIV=12]{scrartcl}
+
+\usepackage[osf]{mathpazo}
+\usepackage{FiraSans}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[names,dvipsnames]{xcolor}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{microtype}
+
+\newcommand{\ti}{\ensuremath{t_{\text{i}}}}
+\newcommand{\tf}{\ensuremath{t_{\text{f}}}}
+\newcommand{\I}{\ensuremath{\mathcal{I}}}
+\newcommand{\eye}[1]{\ensuremath{I_{#1}}}
+
+\author{AK}
+\date{\today}
+\subject{Notes on Sensitivity Approximation}
+\title{Transition Matrix}
+
+\begin{document}
+\maketitle
+
+\section{Ordinary Differential Equation}
+\label{sec:ODEs}
+
+ODE setup:
+\begin{align}
+  \dot x&=f(x,t;\rho,u)\,,&x&\in\mathbb{R}^n\,\label{eq:ODE}\\
+  x(t_0)&=x_0\,,&\rho&\in\mathbb{R}^m\,,
+\end{align}
+where $\rho$ are parameters that may be subject to estimation
+procedures and $u$ parameters that are related to an input to the
+system and are known. The solution $x(t;\rho,u)$ to this initial value problem has a
+parameter sensitivity:
+\begin{equation}
+  \label{eq:sens}
+  S(x,t;\rho,u)_i^{~j}=\frac{dx_i(t;\rho,u)}{d\rho_j}\,.
+\end{equation}
+We also define the Jacobian and parameter derivative as:
+\begin{align}
+  \label{eq:AB}
+  A(x,t;\rho,u)_i^{~j} &= \frac{df_i}{dx_j}\,,&  B(x,t;\rho,u)_i^{~j} &= \frac{df_i}{d\rho_j}\,.\\
+\end{align}
+For any given solution, we will abbreviate the list of arguments to
+just $A(t)$ and $B(t)$ when appropriate. We will use the symbol $\eye{n}$ to denote the identity matrix: $(\eye{n})_{ij}=[i=j]$, $i=1,\dots,n$ and $j=1,\dots,n$.
+
+\section{Peano-Baker series}
+
+The transition matrix, as a series expansion:
+\begin{equation}
+  \label{eq:PHI}
+  \Phi(\tf;\ti)=\I_0(\tf;ti) + \I_1(\tf;\ti) + I_2(\tf;ti) + ...
+\end{equation}
+where
+\begin{equation}
+  \label{eq:I}
+  \begin{split}
+    \I_0(\tf;ti)&=\eye{n}\,,\\
+    \I_1(\tf;\ti)&=\int_{\ti}^{t}A(x,t;\rho,u) \I_0(\tf;\ti) dt\,,\\
+    \I_{nu+1}(\tf;ti)&=\int_{\ti}^{t}A(x,t;\rho,u) \I_k(\tf;\ti) dt\,.
+  \end{split}
+\end{equation}
+Let us assume that we obtain the state variable iteratively (as a
+series of vectors) from a numerical solver with adaptive intervals
+such that each time step has an initial time $\ti$ and a final time
+$\tf$. These intervals can be considered small compared to the
+system's dynamics. So, we shall approximate the integral using only
+it's boundaries, via the trapezoidal integration rule.
+
+We note that
+\begin{equation}
+  \label{eq:I123}
+  \I_{k\ge 1}(t,t)=0\,,
+\end{equation}
+because of the integration over an interval of measure $0$.
+
+Initially we get\footnote{we ompit all function arguments except $t$ for ease of notation}:
+\begin{equation}
+  \label{eq:trapz}
+  \begin{split}
+    \I_0(\tf;ti)&=\eye{n}\,,\\
+    \I_1(\tf;\ti)&=\int_{\ti}^{t}A(t) \I_0(t;\ti) dt=\frac{\tf-\ti}{2} \left(A(\tf) \underbrace{\I_0(\tf;ti)}_{\eye{n}} + A(\ti) \underbrace{\I_0(\ti;\ti)}_{\eye{n}}\right)\\
+    &=\frac{\tf-\ti}{2} \left(A(\tf) + A(\ti)\right)\,,\\
+    \I_2(\tf;\ti) &= \int_{\ti}^{\tf}A(t) \I_1(t;\ti)dt = \frac{\tf-\ti}{2}\left(A(\ti) \I_1(\tf;\ti) + A(\ti) \I_1(\ti;\ti) \right)\\
+    &=\frac{\tf-\ti}{2}A(\ti) \I_1(\tf;\ti)\,.
+  \end{split}
+\end{equation}
+The last line in \eqref{eq:trapz} establishes a pattern that holds for all subsequent iterations:
+\begin{equation}
+  \label{eq:pattern}
+  \begin{split}
+    \I_{k+1}(\tf;\ti) &= \frac{\tf-\ti}{2}A(\ti) \I_k(\tf;\ti)\,.
+  \end{split}
+\end{equation}
+Let $s:=(\tf-\ti)/2$, then we sum up to:
+\begin{align}
+  \Phi(\tf;\ti)&=\eye{n} + \I_1(\tf;\ti) + s A(\tf)\I_1(\tf;ti) + s A(\tf)
+                 \I_2(\tf;ti) +s A(\tf)\I_3(\tf;ti) + \dots   \label{eq:PhiIteration}\\
+    \Phi(\tf;\ti)&=\eye{n} + \I_1(\tf;\ti) + s A(\tf)\I_1(\tf;ti) + s^2 A(\tf)^2 \I_1(\tf;ti) + s^3 A(\tf)^3 \I_1(\tf;ti) +\dots   \label{eq:PhiPower}\\
+\end{align}
+The series can be calculated in two ways:
+\begin{enumerate}
+\item calculate the series members iteratively, by multiplying the previously claulcated $\I_n$ with $s A(\tf)$,
+\item calculate the power series \eqref{eq:PhiPower} using Horner's method.
+\end{enumerate}
+Truncating at $k=3$ and writing the power series in reverse order, using Horner's method results in:
+\begin{equation}
+  \label{eq:PhiHorner}
+  \Phi(\tf;\ti)=((\underbrace{(sA(\tf) + \eye{n})}_{W}\cdot sA(\tf) + \eye{n})\cdot sA(\tf) + \eye{n}) \cdot\I_1(\tf;\ti) + \eye{n}\,.
+\end{equation}
+This formulation makes it easy to calculate $\Phi(\tf;\ti)$ iteratively, using an intermediate variable $W$ (starting with $W=\eye{n}$):
+\begin{enumerate}
+\item $W \leftarrow s W A(\tf) + \eye{n}$
+\item repeat step 1 for $(k-1)$ times
+\item $\Phi \leftarrow W \I_1(\tf;\ti) + \eye{n}$
+\end{enumerate}
+The two different methods may have different compute times, so they
+may be both worthy of consideration.
+
+\end{document}

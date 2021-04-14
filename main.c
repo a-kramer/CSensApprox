@@ -230,11 +230,11 @@ transition_matrix_v2(gsl_matrix *Ji, /* the jacobian at t=ti */
 {
   double s=0.5*(tf-ti);
   size_t ny=Ji->size1;
-  int i,n=2;
+  int i,n=2; 
   gsl_matrix *V=gsl_matrix_alloc(ny,ny);
   gsl_matrix *W=gsl_matrix_alloc(ny,ny);
-  gsl_matrix *I0=gsl_matrix_alloc(ny,ny); // I0(tf;ti) = identity;
-  gsl_matrix *I1=gsl_matrix_alloc(ny,ny); // I1(tf;ti) = 0.5*(tf-ti)*(Jf+Ji)
+  gsl_matrix *I0=gsl_matrix_alloc(ny,ny);  // I0(tf;ti) = identity;
+  gsl_matrix *I1=gsl_matrix_alloc(ny,ny);  // I1(tf;ti) = 0.5*(tf-ti)*(Jf+Ji)
   gsl_matrix *PHI=gsl_matrix_alloc(ny,ny); // I0 + I1(tf;ti) + I2(tf;ti) + ...
   gsl_matrix_set_identity(PHI);
   gsl_matrix_set_identity(I0);
@@ -242,8 +242,8 @@ transition_matrix_v2(gsl_matrix *Ji, /* the jacobian at t=ti */
   gsl_matrix_memcpy(I1,Jf);
   gsl_matrix_add(I1,Ji);
   gsl_matrix_scale(I1,s);
+  
   gsl_matrix_set_identity(W);
-
   for (i=0;i<n;i++){
     gsl_matrix_set_identity(V);
     gsl_blas_dgemm(CblasNoTrans,CblasNoTrans, s, W, Jf, 1.0, V);
