@@ -195,10 +195,9 @@ transition_matrix(gsl_matrix *Ji, /* the jacobian at t=ti */
  double tf) /* final time of the interval (right boundary) */
 {
   double s=0.5*(tf-ti);
-  double b=0.0;
   size_t ny=Ji->size1;
-  gsl_matrix *I=gsl_matrix_alloc(ny,ny);   // I_{ n }(tf,ti)
-  gsl_matrix *I1=gsl_matrix_alloc(ny,ny);  // I_{n+1}(tf,ti)
+  gsl_matrix *I=gsl_matrix_alloc(ny,ny);   // I_{ k }(tf,ti)
+  gsl_matrix *I1=gsl_matrix_alloc(ny,ny);  // I_{k+1}(tf,ti)
   gsl_matrix *PHI=gsl_matrix_alloc(ny,ny);
 
   gsl_matrix_set_identity(PHI);
@@ -211,7 +210,7 @@ transition_matrix(gsl_matrix *Ji, /* the jacobian at t=ti */
   for (i=0;i<n;i++){
     gsl_matrix_add(PHI,I);
     // C = s*A*B + b*C   [dgemm] s is DeltaT*0.5 and b is 0
-    gsl_blas_dgemm(CblasNoTrans,CblasNoTrans, s, Jf, I, b, I1);
+    gsl_blas_dgemm(CblasNoTrans,CblasNoTrans, s, Jf, I, 0.0, I1);
     gsl_matrix_memcpy(I,I1); 
   }
   gsl_matrix_free(I);
@@ -249,7 +248,7 @@ transition_matrix_v2(gsl_matrix *Ji, /* the jacobian at t=ti */
     gsl_blas_dgemm(CblasNoTrans,CblasNoTrans, s, W, Jf, 1.0, V);
     gsl_matrix_memcpy(W,V);
   }
-  gsl_blas_dgemm(CblasNoTrans,CblasNoTrans, 1.0, I1, W, 1.0, PHI);
+  gsl_blas_dgemm(CblasNoTrans,CblasNoTrans, 1.0, W, I1, 1.0, PHI);
 
   gsl_matrix_free(I0);
   gsl_matrix_free(I1);
