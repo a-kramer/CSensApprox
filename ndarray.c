@@ -9,6 +9,8 @@ void ndarray_test(){
   double v=ndarray_value(a,j);
   printf("[%s] j=[1,1,1], value=%g (should be %i)\n",__func__,v,17);
   ndarray_print(a,"test array");
+  ndarray_resize(a,4);
+  ndarray_print(a,"same array resized from 2 to 4 (last index)");
   ndarray_free(a);
   fflush(stdout);
   printf("[%s] ndarray freed.\n",__func__);
@@ -33,6 +35,18 @@ ndarray* ndarray_alloc(int rank, int *size){
   return A;
 }
 
+
+void ndarray_resize(ndarray *a, int new_size){
+  assert(new_size>0);
+  int r=a->rank;
+  a->size[r-1]=new_size;
+  if (r>1){  
+    a->prod[r-1]=new_size*(a->prod[r-2]);
+  } else {
+    a->prod[r-1]=new_size;
+  }
+  a->value=realloc(a->value,sizeof(double)*(a->prod[r-1]));
+}
 
 double* ndarray_ptr(ndarray *a, int *index){
   assert(a);

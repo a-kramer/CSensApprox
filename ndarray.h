@@ -21,4 +21,5 @@ void ndarray_print(ndarray *a, char *label);
 void ndarray_free(ndarray *a);
 void ndarray_test();
 void ndarray_to_h5(ndarray *a, hid_t loc_id, const char *obj_name);
+void ndarray_resize(ndarray *a, int new_size);
 #endif

@@ -15,4 +15,5 @@ typedef struct {
 } solution_t;
 
 solution_t* solution_alloc(int ny, int np, int nt);
+void solution_resize(solution_t *solution, int new_nt);
 #endif
