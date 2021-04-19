@@ -15,6 +15,9 @@ for i=1:nG
  cjac = h5read('CaMKIIs_out.h5',strcat(g_name,'/jac'));
  cjacp = h5read('CaMKIIs_out.h5',strcat(g_name,'/jacp'));
  cS = h5read('CaMKIIs_out.h5',strcat(g_name,'/sensitivity'));
+ PHIf = h5read('CaMKIIs_out.h5',strcat(g_name,'/transition_matrix_forward'));
+ PHIb = h5read('CaMKIIs_out.h5',strcat(g_name,'/transition_matrix_backward'));
+ 
  cS=permute(cS,[2,1,3]);
  t=h5read('CaMKIIs_out.h5',strcat(g_name,'/time'));
  u=h5readatt('CaMKIIs.h5',strcat('/data',g_name),'input');
@@ -36,15 +39,17 @@ for i=1:nG
  nt=length(t);
  mjac=zeros(ny,ny,nt);
  mjacp=zeros(ny,np,nt);
+ cSnorm_t=zeros(1,nt);
+ 
  for j=1:nt
   mjac(:,:,j)=Jy(t(j),Y(j,:)');
   mjacp(:,:,j)=Jp(t(j),Y(j,:)');
+  cSnorm_t(j) = norm(cS(:,:,j));
  end%for
  fprintf("diff between C_jacobian and matlab_jacobian: %g\n",rel_err(mjac,permute(cjac,[2,1,3])));
  fprintf("diff between C_p_jacobian and matlab_p_jacobian: %g\n",rel_err(mjacp,permute(cjacp,[2,1,3])));
 
-
-	% make a second simulation, with slightly different parameters
+ % make a second simulation, with slightly different parameters
  h=1e-6;
  H = randn(np,1)*h;
  p_default=p;
@@ -65,6 +70,9 @@ for i=1:nG
  end%for
  S_err=rel_err(Y2,predicted_Y);
  fprintf("sensitivity error estimate based on trajectory prediction: %g\n",S_err);
+ plot(t,cSnorm_t);
+ xlabel('t');
+ ylabel('norm(S)');
  %figure(i);
  %plot(T,Y);
  %xlabel('t');

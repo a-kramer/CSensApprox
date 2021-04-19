@@ -7,11 +7,13 @@
 #include "ndarray.h"
 
 typedef struct {
-  gsl_vector *t;
-  gsl_matrix *y;
+  ndarray *t;
+  ndarray *y;
   ndarray *Jy;
   ndarray *Jp; 
   ndarray *Sy;
+  ndarray *PHIf;
+  ndarray *PHIb;
 } solution_t;
 
 solution_t* solution_alloc(int ny, int np, int nt);

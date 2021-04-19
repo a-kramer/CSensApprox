@@ -14,6 +14,8 @@ solution_t* solution_alloc(int ny, int np, int nt){
   size[1]=ny;
   size[2]=nt;
   solution->Jy=ndarray_alloc(3,size);
+  solution->PHIf=ndarray_alloc(3,size);
+  solution->PHIb=ndarray_alloc(3,size);
   return solution;
 }
 
@@ -24,4 +26,6 @@ void solution_resize(solution_t *solution, int new_nt){
   ndarray_resize(solution->Sy,new_nt);
   ndarray_resize(solution->Jp,new_nt);
   ndarray_resize(solution->Jy,new_nt);
+  ndarray_resize(solution->PHIf,new_nt);
+  ndarray_resize(solution->PHIb,new_nt);
 }

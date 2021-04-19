@@ -188,44 +188,44 @@ void fix_tspan_if_necessary(gsl_vector *t, /* measurement time vector (from the 
 /* Calculates the transition matrix using a truncated Peano Baker
    series, and 1-step trapezoidal approximation of integrals: `tf-ti`
    needs to be small.*/
-gsl_matrix* /* PHI(tf,ti): the transition matrix between ti and tf*/
+void 
 transition_matrix(gsl_matrix *Ji, /* the jacobian at t=ti */
  gsl_matrix *Jf, /* the jacobian at t=tf */
  double ti, /* initial time of the interval (left bondary) */
- double tf) /* final time of the interval (right boundary) */
+ double tf, /* final time of the interval (right boundary) */
+ double *phi) /* [OUT] PHI(tf,ti): the transition matrix between ti and tf*/
 {
   double s=0.5*(tf-ti);
   size_t ny=Ji->size1;
-  gsl_matrix *I=gsl_matrix_alloc(ny,ny);   // I_{ k }(tf,ti)
-  gsl_matrix *I1=gsl_matrix_alloc(ny,ny);  // I_{k+1}(tf,ti)
-  gsl_matrix *PHI=gsl_matrix_alloc(ny,ny);
+  gsl_matrix *I_k=gsl_matrix_alloc(ny,ny);   // I_{ k }(tf,ti)
+  gsl_matrix *I_k_plus_1=gsl_matrix_alloc(ny,ny);  // I_{k+1}(tf,ti)
+  gsl_matrix_view PHI=gsl_matrix_view_array(phi,ny,ny);
 
-  gsl_matrix_set_identity(PHI);
+  gsl_matrix_set_identity(&PHI.matrix); // I_0
   int i,n=2;
-  // I1
-  gsl_matrix_memcpy(I,Jf);
-  gsl_matrix_add(I,Ji);
-  gsl_matrix_scale(I,s);
+  // I_1 is:
+  gsl_matrix_memcpy(I_k,Jf);
+  gsl_matrix_add(I_k,Ji);
+  gsl_matrix_scale(I_k,s);
   
   for (i=0;i<n;i++){
-    gsl_matrix_add(PHI,I);
+    gsl_matrix_add(&PHI.matrix,I_k);
     // C = s*A*B + b*C   [dgemm] s is DeltaT*0.5 and b is 0
-    gsl_blas_dgemm(CblasNoTrans,CblasNoTrans, s, Jf, I, 0.0, I1);
-    gsl_matrix_memcpy(I,I1); 
+    gsl_blas_dgemm(CblasNoTrans,CblasNoTrans, s, Jf, I_k, 0.0, I_k_plus_1);
+    gsl_matrix_memcpy(I_k,I_k_plus_1); 
   }
-  gsl_matrix_free(I);
-  gsl_matrix_free(I1);
-  return PHI;
+  gsl_matrix_free(I_k);
+  gsl_matrix_free(I_k_plus_1);
 }
 
 /* Calculates the transition matrix using a truncated Peano Baker
    series, and 1-step trapezoidal approximation of integrals: `tf-ti`
    needs to be small.*/
-gsl_matrix* /* PHI(tf,ti): the transition matrix between ti and tf*/
-transition_matrix_v2(gsl_matrix *Ji, /* the jacobian at t=ti */
+void transition_matrix_v2(gsl_matrix *Ji, /* the jacobian at t=ti */
  gsl_matrix *Jf, /* the jacobian at t=tf */
  double ti, /* initial time of the interval (left bondary) */
- double tf) /* final time of the interval (right boundary) */
+ double tf,/* final time of the interval (right boundary) */
+ double *phi) /* return buffer */
 {
   double s=0.5*(tf-ti);
   size_t ny=Ji->size1;
@@ -234,8 +234,8 @@ transition_matrix_v2(gsl_matrix *Ji, /* the jacobian at t=ti */
   gsl_matrix *W=gsl_matrix_alloc(ny,ny);
   gsl_matrix *I0=gsl_matrix_alloc(ny,ny);  // I0(tf;ti) = identity;
   gsl_matrix *I1=gsl_matrix_alloc(ny,ny);  // I1(tf;ti) = 0.5*(tf-ti)*(Jf+Ji)
-  gsl_matrix *PHI=gsl_matrix_alloc(ny,ny); // I0 + I1(tf;ti) + I2(tf;ti) + ...
-  gsl_matrix_set_identity(PHI);
+  gsl_matrix_view PHI=gsl_matrix_view_array(phi,ny,ny);
+  gsl_matrix_set_identity(&PHI.matrix);
   gsl_matrix_set_identity(I0);
   // I1
   gsl_matrix_memcpy(I1,Jf);
@@ -248,13 +248,12 @@ transition_matrix_v2(gsl_matrix *Ji, /* the jacobian at t=ti */
     gsl_blas_dgemm(CblasNoTrans,CblasNoTrans, s, W, Jf, 1.0, V);
     gsl_matrix_memcpy(W,V);
   }
-  gsl_blas_dgemm(CblasNoTrans,CblasNoTrans, 1.0, W, I1, 1.0, PHI);
+  gsl_blas_dgemm(CblasNoTrans,CblasNoTrans, 1.0, W, I1, 1.0, &PHI.matrix);
 
   gsl_matrix_free(I0);
   gsl_matrix_free(I1);
   gsl_matrix_free(V);
   gsl_matrix_free(W);
-  return PHI;
 }
 
 
@@ -266,39 +265,45 @@ void sensitivity_approximation(solution_t *solution)/* solution struct from a nu
 
   int np = solution->Jp->size[0];
   int ny = solution->Jp->size[1];
-  int nt = solution->t->size;
+  int nt = solution->t->size[0];
   int index[3]={0,0,0};
   int j;
   double tf, ti;
+  double *PHIf;
+  double *PHIb;
   gsl_matrix_view Sf,Si,Ji,Jf,Bf,Bi;
-  gsl_matrix *PHI_fwd, *PHI_bwd;
+  gsl_matrix_view PHI_fwd, PHI_bwd;
   gsl_matrix *S_temp=gsl_matrix_alloc(ny,np);
   assert(S_temp);
 
   for (j=1;j<nt;j++){
     gsl_matrix_set_zero(S_temp);
     index[2]=j; // current time index
-    Sf = gsl_matrix_view_array(ndarray_ptr(solution->Sy,index),ny,np);
+    Sf=gsl_matrix_view_array(ndarray_ptr(solution->Sy,index),ny,np);
     Jf=gsl_matrix_view_array(ndarray_ptr(solution->Jy,index),ny,ny);
     Bf=gsl_matrix_view_array(ndarray_ptr(solution->Jp,index),ny,np);
-    tf=gsl_vector_get(solution->t,j);
+    tf=ndarray_value(solution->t,&(index[2]));
+    PHIf=ndarray_ptr(solution->PHIf,index);
+    PHIb=ndarray_ptr(solution->PHIb,index);
     
     index[2]=j-1; // previous time index
-    Si = gsl_matrix_view_array(ndarray_ptr(solution->Sy,index),ny,np);
+    Si=gsl_matrix_view_array(ndarray_ptr(solution->Sy,index),ny,np);
     Ji=gsl_matrix_view_array(ndarray_ptr(solution->Jy,index),ny,ny);
     Bi=gsl_matrix_view_array(ndarray_ptr(solution->Jp,index),ny,np);
-    ti=gsl_vector_get(solution->t,j-1);
+    ti=ndarray_value(solution->t,&(index[2]));
 
-    PHI_fwd = transition_matrix_v2(&Ji.matrix,&Jf.matrix,ti,tf);
-    PHI_bwd = transition_matrix_v2(&Jf.matrix,&Ji.matrix,tf,ti);
+    transition_matrix_v2(&Ji.matrix,&Jf.matrix,ti,tf,PHIf);
+    transition_matrix_v2(&Jf.matrix,&Ji.matrix,tf,ti,PHIb);
 
+    PHI_fwd=gsl_matrix_view_array(PHIf,ny,ny);
+    PHI_bwd=gsl_matrix_view_array(PHIb,ny,ny);
     
     // Sf = PHI(k+1,k) * (0.5*dt*(PHI(k,k+1)*B(k+1) + B(k)) + Si )
-    gsl_blas_dgemm(CblasNoTrans,CblasNoTrans, 1.0, PHI_bwd, &Bf.matrix, 0.0, S_temp);
+    gsl_blas_dgemm(CblasNoTrans,CblasNoTrans, 1.0, &PHI_bwd.matrix, &Bf.matrix, 0.0, S_temp);
     gsl_matrix_add(S_temp,&Bi.matrix);
     gsl_matrix_scale(S_temp,0.5*(tf-ti));
     gsl_matrix_add(S_temp,&Si.matrix);
-    gsl_blas_dgemm(CblasNoTrans,CblasNoTrans, 1.0, PHI_fwd, S_temp, 0.0, &Sf.matrix);
+    gsl_blas_dgemm(CblasNoTrans,CblasNoTrans, 1.0, &PHI_fwd.matrix, S_temp, 0.0, &Sf.matrix);
   }
   gsl_matrix_free(S_temp);
 }
@@ -325,7 +330,7 @@ simulate(gsl_odeiv2_system sys, /* the system to integrate */
   size_t d=sim[0].y0->size;
   size_t p=par->size;
   gsl_vector *y=gsl_vector_alloc(d);
-  gsl_vector_view y_row;
+  double *y_ptr;
   size_t i,j,k;
   solution_t **solution=malloc(sizeof(solution_t*)*N);
   int index[3]={0,0,0};
@@ -377,13 +382,14 @@ simulate(gsl_odeiv2_system sys, /* the system to integrate */
 	  printf("%g\t",gsl_vector_get(y,k));
 	printf("\n");
 	index[2]=j;
+	y_ptr = ndarray_ptr(solution[i]->y,&(index[1]));
+	
 	Jy = ndarray_ptr(solution[i]->Jy,index);
 	Jp = ndarray_ptr(solution[i]->Jp,index);
 	sys.jacobian(t, y->data, Jy, dfdt, par->data);
-	        dfdp(t, y->data, Jp, par->data);
-	y_row = gsl_matrix_row(solution[i]->y,j);
-	gsl_vector_memcpy(&y_row.vector,y);
-	gsl_vector_set(solution[i]->t,j,t);
+	dfdp(t, y->data, Jp, par->data);
+	memcpy(y_ptr,y->data,sizeof(double)*(y->size));
+	*ndarray_ptr(solution[i]->t,&(index[2]))=t;
 	break;
       default:
 	fprintf(stderr,"[%s] unhandled error code: %#x\n",__func__,status);
@@ -393,8 +399,8 @@ simulate(gsl_odeiv2_system sys, /* the system to integrate */
     }
     sensitivity_approximation(solution[i]);
     if (h5f){
-      gsl_matrix_to_h5(solution[i]->y,g_id,"state");
-      gsl_vector_to_h5(solution[i]->t,g_id,"time",NULL);
+      ndarray_to_h5(solution[i]->y,g_id,"state");
+      ndarray_to_h5(solution[i]->t,g_id,"time");
       ndarray_to_h5(solution[i]->Jy,g_id,"jac");
       ndarray_to_h5(solution[i]->Jp,g_id,"jacp");
       ndarray_to_h5(solution[i]->Sy,g_id,"sensitivity");
@@ -429,12 +435,11 @@ simulate_evolve(gsl_odeiv2_system sys, /* the system to integrate */
   size_t p=par->size;
   gsl_vector *y=gsl_vector_alloc(d);
   double h=1e-2;
-  gsl_vector_view y_row;
-  size_t i,j,k;
+  size_t i,k;
   solution_t **solution=malloc(sizeof(solution_t*)*N);
   int index[3]={0,0,0};
-  double t,tf,dt;
-  double *Jy,*Jp;
+  double t,tf;
+  double *Jy,*Jp,*y_ptr;
   double *dfdt=malloc(sizeof(double)*d);
   size_t n,n_max=100;
   hid_t g_id;
@@ -460,23 +465,22 @@ simulate_evolve(gsl_odeiv2_system sys, /* the system to integrate */
     n=0;
     solution[i]=solution_alloc(d,p,n_max);
     while (t<tf){
-      status = gsl_odeiv2_evolve_apply(driver->e, driver->c, driver->s, sys, &t, tf, &h, y->data);
+      status = gsl_odeiv2_evolve_apply(driver->e, driver->c, driver->s, &sys, &t, tf, &h, y->data);
       //report any error codes to the user
       switch (status){
       case GSL_EMAXITER:
-	fprintf(stderr,"[%s] simulation %li, time_point %li: maximum number of steps reached.\n",__func__,i,j);
+	fprintf(stderr,"[%s] simulation %li, time_point %li: maximum number of steps reached.\n",__func__,i,n);
 	fprintf(stderr,"\t\tfinal time: %.10g (short of %.10g)",t,tf);
 	break;
       case GSL_ENOPROG:
-	fprintf(stderr,"[%s] simulation %li, time_point %li: step size dropeed below set minimum.\n",__func__,i,j);
+	fprintf(stderr,"[%s] simulation %li, time_point %li: step size dropeed below set minimum.\n",__func__,i,n);
 	fprintf(stderr,"\t\tfinal time: %.10g (short of %.10g)",t,tf);
 	break;
       case GSL_EBADFUNC:
-	fprintf(stderr,"[%s] simulation %li, time_point %li: bad function.\n",__func__,i,j);
+	fprintf(stderr,"[%s] simulation %li, time_point %li: bad function.\n",__func__,i,n);
 	fprintf(stderr,"\t\tfinal time: %.10g (short of %.10g)",t,tf);
 	break;
       case GSL_SUCCESS:
-	n++;
 	if (n==n_max){
 	  n_max=n_max+100;
 	  solution_resize(solution[i],n_max);
@@ -486,14 +490,16 @@ simulate_evolve(gsl_odeiv2_system sys, /* the system to integrate */
 	for (k=0;k<y->size;k++)
 	  printf("%g\t",gsl_vector_get(y,k));
 	printf("\n");
-	index[2]=j;
+	index[2]=n;
+	y_ptr = ndarray_ptr(solution[i]->y,&(index[1]));
 	Jy = ndarray_ptr(solution[i]->Jy,index);
 	Jp = ndarray_ptr(solution[i]->Jp,index);
 	sys.jacobian(t, y->data, Jy, dfdt, par->data);
-	        dfdp(t, y->data, Jp, par->data);
-	y_row = gsl_matrix_row(solution[i]->y,j);
-	gsl_vector_memcpy(&y_row.vector,y);
-	gsl_vector_set(solution[i]->t,j,t);
+	dfdp(t, y->data, Jp, par->data);
+	
+	memcpy(y_ptr,y->data,sizeof(double)*(y->size));
+	*ndarray_ptr(solution[i]->t,&(index[2]))=t;
+	n++;
 	break;
       default:
 	fprintf(stderr,"[%s] unhandled error code: %#x\n",__func__,status);
@@ -504,11 +510,13 @@ simulate_evolve(gsl_odeiv2_system sys, /* the system to integrate */
     solution_resize(solution[i],n);
     sensitivity_approximation(solution[i]);
     if (h5f){
-      gsl_matrix_to_h5(solution[i]->y,g_id,"state");
-      gsl_vector_to_h5(solution[i]->t,g_id,"time",NULL);
+      ndarray_to_h5(solution[i]->y,g_id,"state");
+      ndarray_to_h5(solution[i]->t,g_id,"time");
       ndarray_to_h5(solution[i]->Jy,g_id,"jac");
       ndarray_to_h5(solution[i]->Jp,g_id,"jacp");
       ndarray_to_h5(solution[i]->Sy,g_id,"sensitivity");
+      ndarray_to_h5(solution[i]->PHIf,g_id,"transition_matrix_forward");
+      ndarray_to_h5(solution[i]->PHIb,g_id,"transition_matrix_backward");
       H5Gclose(g_id);
     }    
     printf("\n\n");
@@ -664,7 +672,7 @@ main(int argc, char *argv[]){
   assert(h5f);
   // the most CPU work happens here:
   
-  solution_t **solution=simulate(sys,driver,sim,N,t,&(u.vector),par,dfdp,h5f);
+  solution_t **solution=simulate_evolve(sys,driver,sim,N,t,&(u.vector),par,dfdp,h5f);
   gsl_odeiv2_driver_free(driver);
   H5Fclose(h5f);
   return EXIT_SUCCESS;
