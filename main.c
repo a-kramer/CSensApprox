@@ -465,6 +465,25 @@ simulate_evolve(gsl_odeiv2_system sys, /* the system to integrate */
     n=0;
     solution[i]=solution_alloc(d,p,n_max);
     while (t<tf){
+      if (n==n_max){
+	n_max=n_max+100;
+	solution_resize(solution[i],n_max);
+      }
+      
+      printf("%g\t",t);
+      for (k=0;k<y->size;k++)
+	printf("%g\t",gsl_vector_get(y,k));
+      printf("\n");
+      index[2]=n;
+      y_ptr = ndarray_ptr(solution[i]->y,&(index[1]));
+      Jy = ndarray_ptr(solution[i]->Jy,index);
+      Jp = ndarray_ptr(solution[i]->Jp,index);
+      sys.jacobian(t, y->data, Jy, dfdt, par->data);
+      dfdp(t, y->data, Jp, par->data);
+      
+      memcpy(y_ptr,y->data,sizeof(double)*(y->size));
+      *ndarray_ptr(solution[i]->t,&(index[2]))=t;
+
       status = gsl_odeiv2_evolve_apply(driver->e, driver->c, driver->s, &sys, &t, tf, &h, y->data);
       //report any error codes to the user
       switch (status){
@@ -481,24 +500,6 @@ simulate_evolve(gsl_odeiv2_system sys, /* the system to integrate */
 	fprintf(stderr,"\t\tfinal time: %.10g (short of %.10g)",t,tf);
 	break;
       case GSL_SUCCESS:
-	if (n==n_max){
-	  n_max=n_max+100;
-	  solution_resize(solution[i],n_max);
-	}
-
-	printf("%g\t",t);
-	for (k=0;k<y->size;k++)
-	  printf("%g\t",gsl_vector_get(y,k));
-	printf("\n");
-	index[2]=n;
-	y_ptr = ndarray_ptr(solution[i]->y,&(index[1]));
-	Jy = ndarray_ptr(solution[i]->Jy,index);
-	Jp = ndarray_ptr(solution[i]->Jp,index);
-	sys.jacobian(t, y->data, Jy, dfdt, par->data);
-	dfdp(t, y->data, Jp, par->data);
-	
-	memcpy(y_ptr,y->data,sizeof(double)*(y->size));
-	*ndarray_ptr(solution[i]->t,&(index[2]))=t;
 	n++;
 	break;
       default:

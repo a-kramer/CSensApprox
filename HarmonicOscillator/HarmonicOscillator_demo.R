@@ -16,7 +16,7 @@ source("HarmonicOscillator.R")
 
 # --- Parameters ---
 parameters = c(
-    k = 0.5+dk,
+    k = exp(-1)+dk,
     c = 0.0,
     F = 0.0
 )
@@ -36,7 +36,7 @@ sol = ode(y = state, times = x, func = HarmonicOscillator, parms = parameters,
 # --- Plot the solution ---
 par(mfcol = c(2, 1))
 tm <- sol[, "time"]
-plot(tm, sol[, "v"], type = "l", col = "blue",
+plot(tm, sol[, "v"], type = "l",
      xlab = "t", ylab = "v")
-plot(tm, sol[, "y"], type = "l", col = "blue",
+plot(tm, sol[, "y"], type = "l",
      xlab = "t", ylab = "y")
