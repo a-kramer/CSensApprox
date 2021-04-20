@@ -77,8 +77,8 @@ verify <- function(h5g,D,Label){
          type="l",
          xlab="t",
          ylab="y, v",
-         main="[C] gsl odeiv solution",
-         sub=Label,
+         sub="[C] gsl odeiv solution",
+         main=Label,
          lty="dashed",
          xlim=c(0,xf),
          ylim=c(-1,1))
@@ -218,13 +218,10 @@ verify <- function(h5g,D,Label){
     return(list(y=y,S=S))
 }
 
-load_and_verify <- function(ModelName="HarmonicOscillator",GroupName=c("NoDampingNoDrivingForce","WithDampingButNoDrivingForce","WithDampingAndDrivingForce")){
+load_and_verify <- function(ModelName="HarmonicOscillator"){
     output.h5 <- sprintf("%s_out.h5",ModelName)
-    print(output.h5)
-    print(GroupName[1])
     h5f <- h5file(output.h5)
-
-    for (g in GroupName){
+    for (g in names(h5f)){
         gl <- gsub("([A-Z])"," \\L\\1\\E",g,perl=TRUE)
         Default <- .defaults(sprintf("%s.h5",ModelName),g)
         print(Default)

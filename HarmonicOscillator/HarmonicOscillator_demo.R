@@ -16,7 +16,7 @@ source("HarmonicOscillator.R")
 
 # --- Parameters ---
 parameters = c(
-    k = exp(-1)+dk,
+    k = 0.5,
     c = 0.0,
     F = 0.0
 )

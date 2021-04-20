@@ -13,14 +13,20 @@ h5attr(h5d,"time") <- time
 h5attr(h5d,"input") <- c(0.0,0.0)
 h5attr(h5d,"InitialValue") <- c(0.0,1.0)
 
-h5d <- createDataSet(h5g, "WithDampingButNoDrivingForce", Data)
+h5d <- createDataSet(h5g, "WithLittleDampingButNoDrivingForce", Data)
 h5attr(h5d,"index") <- 1
+h5attr(h5d,"time") <- time
+h5attr(h5d,"input") <- c(0.3,0.0)
+h5attr(h5d,"InitialValue") <- c(0.0,1.0)
+
+h5d <- createDataSet(h5g, "WithDampingButNoDrivingForce", Data)
+h5attr(h5d,"index") <- 2
 h5attr(h5d,"time") <- time
 h5attr(h5d,"input") <- c(1.0,0.0)
 h5attr(h5d,"InitialValue") <- c(0.0,1.0)
 
 h5d <- createDataSet(h5g, "WithDampingAndDrivingForce", Data)
-h5attr(h5d,"index") <- 2
+h5attr(h5d,"index") <- 3
 h5attr(h5d,"time") <- time
 h5attr(h5d,"input") <- c(1.0,0.01)
 h5attr(h5d,"InitialValue") <- c(0.0,1.0)
