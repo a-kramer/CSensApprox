@@ -194,7 +194,6 @@ verify <- function(h5g,D,Label){
     ##                 ^
     ##               (k=w*w)
     ##
-    ## dy/dk = -a*sin(w*t+f)*t/(2*sqrt(k))
     ##
     ## y(0) = + a*cos(f) = y0
     ## v(0) = - a*cos(f)*r*w - a*sin(f)*sqrt(1-r*r)*w

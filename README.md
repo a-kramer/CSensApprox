@@ -37,21 +37,58 @@ The [time span](#Simulation-Time-Span) is a range, e.g: `-1:0.1:6`, with an incr
 
 ### Simulation Instructions (HDF5)
 
-The `-d` option provides the solver with model setups. The file needs
-a `prior` group with a `mu` dataset with values for the parameters of
-the model (µ is in log-space). Additionally, there needs to be a
-`data` group, which contains datasets (with any name) with some data
-values not used here. The data should come with hdf5 ATTRIBUTES:
+We use hdf5 files, because almost any language can read and write hdf5
+files (julia, R, matlab and python have packages with bindings to the
+C API that work very well). These hdf5 files are well suited for the transfer
+of data between different architectures. 
+
+But, one thing that hdf5 is not that well suited for is preserving the
+indexing order of an array that has more than one index.
+
+To hdf5 the order of the indices is from slow to fast: `(i,j,k)` means
+`i*Nj*Hk+j*Nk+k`. From a certain point of view this is the same order
+as an array in C would have, if it is indexed like this:
+`a[i][j][k]`. But, C arrays are rarely indexed like this (because it
+is not easy to pass such a thing to a function), and usually we would
+do the index arithmetic ourselves: e.g. `A[i+j*Ni+k*Nj*Ni]`. So,
+really the decision what the fast index is in C is up to the
+individual programmer.
+
+The R language has the reverse ordering of indices: `[i,j,k]` means
+`i+j*Ni+k*Nj*Ni`.  So, don't expect the arrays to have the same order
+of dimensions in R compared to what `h5dump` or `h5ls` report.
+
+In any case the memory underneath is unaffected and it is always
+possible to preserve the content by re-ordering the size information,
+at no point do we need to transpose anything in memory.
+
+The `-d` option provides the solver with model setups in hdf5
+form. The file needs a `prior` group (a group is a bit like a folder)
+with a `mu` dataset with values for the parameters of the model (µ is
+interpreted as being in log-space). Additionally, there needs to be a
+`data` group, which contains datasets (any name will do) with some
+data values. We don't actually use these values here, this content is
+intended for parameter estimation where the model parameters are
+adjusted to fit this data. But, to make a simulation of these datasets
+possible, simulation instructions must be provided. We do this in the
+form of hdf5 ATTRIBUTES:
 
 | attribute name | meaning |
 |---------------:|:--------|
 | time | measurement times for the data|
 | input | input parameters in linear space (`u`) |
 | InitialValue | the initial value for the state vector `y` (for each simulation run) |
+| index | a number from 0 to n-1, given n datasets |
 
-For this program, the values in the hdf5 DATASET are not important,
-only the simulation instructions are used. The maximum of the _time_
-vector is used to set a reasonable simulation time-span.
+For this program (it just solves the initial value problem once), the
+values in the DATASET are not important, only the simulation
+instructions are used. The maximum of the _time_ vector is used to set
+a reasonable simulation time-span.
+
+Writing various datasets to a file will not preserve the order. So, to
+keep the order of the datasets as the user intended them, we also
+include an index attribute. We use it to import these instructions
+exactly into that order (and simulate them in that order as well).
 
 The model has a parameter slot (a vector `p`), which will be assembled like this:
 
@@ -59,11 +96,11 @@ The model has a parameter slot (a vector `p`), which will be assembled like this
 p=c(exp(mu), u); # in R, for illustration
 ```
 
-This is because the model has unknown parameters, for which we have a
-probability density with median µ (logarithmic) and known parameters
-u, which represent the input to the model (as part of an
-_experiment_). In C, this concatenation is of course more difficult to
-write.
+This is because the model is assumed to have unknown parameters, for
+which we have a probability density with median _µ_ (log-normal
+distribution) and known parameters _u_, which represent the input to
+the model (as part of an _experiment_). In C, this concatenation is of
+course more difficult to write.
 
 ### Tolerances and Step-Size
 
