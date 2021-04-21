@@ -1,6 +1,5 @@
 model_g = h5info('CaMKIIs.h5');
 output_g = h5info('CaMKIIs_out.h5');
-addpath("~/Documents/CaMKIIs/matlab");
 
 nG=length(output_g.Groups);
 log_par=h5read('CaMKIIs.h5','/prior/mu');

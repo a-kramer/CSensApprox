@@ -229,7 +229,7 @@ void transition_matrix_v2(gsl_matrix *Ji, /* the jacobian at t=ti */
 {
   double s=0.5*(tf-ti);
   size_t ny=Ji->size1;
-  int i,n=2; 
+  int i,n=1; 
   gsl_matrix *V=gsl_matrix_alloc(ny,ny);
   gsl_matrix *W=gsl_matrix_alloc(ny,ny);
   gsl_matrix *I0=gsl_matrix_alloc(ny,ny);  // I0(tf;ti) = identity;

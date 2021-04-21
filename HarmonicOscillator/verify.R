@@ -34,24 +34,27 @@ verify <- function(h5g,D,Label){
     w0=sqrt(k)
     sol <- .exact.solution(x,sv0,k,u)
     y.exact <- sol[['y']]
-    
-    ##dev.new()
     L <- gsub("[ ]","_",Label)
-    pdf(sprintf("%s_gsl_vs_exact_solution.pdf",L))
-    y.error <- .solution.error(x,sv,sol,k,cS,Label,u)
-    dev.off()
     
-    ##dev.new()
-    pdf(sprintf("%s_linearization_error.pdf",L))
-    par(mfcol = c(2, 1))
-    .linear.sensitivity.error(x,sv,sv0,cS,k,dk=2e-2,u,Label)
-    .linear.sensitivity.error(x,sv,sv0,cS,k,dk=4e-2,u,Label)
-    dev.off()
-    
-    ##dev.new()
-    pdf(sprintf("%s_compared_to_deSolve.pdf",L))
-    .compare.with.deSolve(x,sv,sv0,cS,k,dk=4e-2,u)
-    dev.off()
+    if (abs(u['F'])<1e-2){
+        ##dev.new()
+
+        pdf(sprintf("%s_gsl_vs_exact_solution.pdf",L))
+        y.error <- .solution.error(x,sv,sol,k,cS,Label,u)
+        dev.off()
+        
+        ##dev.new()
+        pdf(sprintf("%s_linearization_error.pdf",L))
+        par(mfcol = c(2, 1))
+        .linear.sensitivity.error(x,sv,sv0,cS,k,dk=2e-2,u,Label)
+        .linear.sensitivity.error(x,sv,sv0,cS,k,dk=4e-2,u,Label)
+        dev.off()
+    } else {
+        ##dev.new()
+        pdf(sprintf("%s_compared_to_deSolve.pdf",L))
+        .compare.with.deSolve(x,sv,sv0,cS,k,dk=4e-2,u,Label)
+        dev.off()
+    }
 }
 
 .defaults <- function(DataFile,Name){
@@ -118,7 +121,7 @@ time-points.")
     return(y.error)
 }
 
-.compare.with.deSolve <- function(x,sv,sv0=c(v=0.0,y=1.0),cS,k=exp(-1),dk=1e-2,u=c(0.0,0.0)){
+.compare.with.deSolve <- function(x,sv,sv0=c(v=0.0,y=1.0),cS,k=exp(-1),dk=1e-2,u=c(0.0,0.0),Label){
         
     dsv <- cS[1,,]*dk
     sv.est <- sv+dsv
@@ -140,16 +143,27 @@ time-points.")
  
         par(mfcol = c(2, 1))
         tm <- sol[, "time"]
-        plot(tm, sol[, "v"], type = "l",
-             xlab = "t", ylab = "v",main=sprintf("deSolve solution at dk=%g",dk))
-        plot(tm, sol[, "y"], type = "l",
-             xlab = "t", ylab = "y",main=sprintf("comparison to deSolve"),sub=sprintf("sum(abs(sol[y](t;k+dk) - y(k)+[dy/dk]*dk)) = %g",Diff))
+        plot(tm, sol[, "v"],
+             type = "l",
+             xlab = "t",
+             ylab = "v",
+             main=Label,
+             sub=sprintf("deSolve solution v(t;k+dk) with dk=%g",dk))
+        lines(x,sv.est[1,],lty=2)
+        legend("topright",c("deSolve","v(t;k)+Sv(t;k)*dk"),lty=c(1,2))
+
+        plot(tm, sol[, "y"],
+             type = "l",
+             xlab = "t",
+             ylab = "y",
+             main=Label,
+             sub=sprintf("average missmatch: %g",Diff))
         lines(x,sv.est[2,],lty=2)
-        legend("topright",c("deSolve","y(t;k)+[dy/dk]*dk"),lty=c(1,2))
+        legend("topright",c("deSolve","y(t;k)+Sy(t;k)*dk"),lty=c(1,2))
     }
 }
 
-.linear.sensitivity.error <- function(x,sv,sv0,cS,k,dk,u,Label="linearization error"){
+.linear.sensitivity.error <- function(x,sv,sv0,cS,k,dk,u,Label="linearization error with F=0"){
     dsv <- cS[1,,]*dk
     sv.est <- sv+dsv
     y0 <- sv0[2]
@@ -158,16 +172,17 @@ time-points.")
     xf <- max(x)*1.2
     y.err <- sum(abs(sol.k[['y']]-sv.est[2,]))/length(x)
     plot(x,sol.k[['y']],
+         ylab='y',
          type='p',
          pch=1,
-         sub=sprintf("sum(abs(y(t;k+dk) - (y(t;k) + [dy/dk]*dk)))/nt = %g",y.err),
+         sub=sprintf("averaged missmatch: %g",y.err),
          main=sprintf("%s at dk=%g",Label,dk),
          xlim=c(0,xf))
     lines(x,sv.est[2,],lty=2)
     w0 <- sqrt(k)
     lines(x,sol.k0[['y']],lty=1)
     legend("bottomright",
-           c("y(t;k+dk)","y(t;k)+S_y_k*dk","y(t;k)"),
+           c("exact y(t;k+dk,c,F=0)",sprintf("y(t;k,c,F=%g)+Sy(t;k,c,F)*dk",u[1],u[2]),"exact y(t;k,c,F=0)"),
            lty=c(0,2,1),
            pch=c(1,NA,NA))
 }

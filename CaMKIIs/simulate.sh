@@ -1,0 +1,7 @@
+#!/bin/bash
+ABSOLUTE_TOLERANCE=1e-12
+RELATIVE_TOLERANCE=1e-8
+OPTIONS="--abs-tol ${ABSOLUTE_TOLERANCE} --rel-tol ${RELATIVE_TOLERANCE}"
+../gsl_odeiv $OPTIONS -t "-0.1 0 0.1"
+
+
