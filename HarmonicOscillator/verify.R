@@ -13,17 +13,24 @@ verify <- function(h5g,D,Label){
     cS <- readDataSet(h5g[["sensitivity"]])
     jac <- readDataSet(h5g[["jac"]])
     jacp <- readDataSet(h5g[["jacp"]])
-    message("sensitivity approximation, dimensions (parameter × state × time): ")
+    message(sprintf("## %s",Label))
+    message(sprintf("Problem size/sensitivity dimensions: `parameter × state × time`:\n```R"))
     print(dim(cS))
-    message("defaults:")
+    message("```")
+
     k <- D[["p"]]
     names(k) <- 'k'
-    print(k)
+
     sv0 <- D[["sv0"]]
     u <- D[["input"]]
     names(u) <- c('c','F')
     names(sv0) <- c("v","y")
+
+    message(sprintf("### Default Values:\n```R"))
+    print(k)
     print(sv0)
+    message("```")
+
     w0=sqrt(k)
     sol <- .exact.solution(x,sv0,k,u)
     y.exact <- sol[['y']]
@@ -87,16 +94,19 @@ verify <- function(h5g,D,Label){
 
     y.exact <- sol[['y']]
     S.exact <- sol[['S']]
-    message("exact sensitivity of the 4th to 8th time point:")
+    message(sprintf("Analytical sensitivity of the 4th to 8th time point:\n```R"))
     print(S.exact[4:8])
-
-    message("estimated sensitivity of the 4th to 8th time point:")
+    message("```")
+    message(sprintf("Estimated sensitivity of the 4th to 8th time point:\n```R"))
     print(cS[1,2,4:8])
+    message("```")
 
     y.error <- sum(abs(y.exact - sv[2,]))/length(x)
     S.error <- sum(abs(S.exact - cS[1,2,]))/length(x)
-    message(sprintf("[gsl odeiv] the trajectory error is %g",y.error))
-    message(sprintf("[sensitivity approximation] the sensitivity error is %g",S.error))
+    message("The error is calculated as the sum of absolute differences, normalized by the number of
+time-points.")
+    message(sprintf("The trajectory error from `gsl odeiv2` is %g.",y.error))
+    message(sprintf("The approximate sensitivity error is %g.",S.error))
     plot(x,y.exact,
          lty="solid",
          ylim=c(-1,1),
@@ -126,7 +136,7 @@ verify <- function(h5g,D,Label){
                   atol = 1e-4, rtol = 1e-4)
         y.R <- t(sol[,"y"])
         Diff <- sum(abs(y.R - sv.est[2,]))/length(x)
-        message(sprintf("[missmatch] deSolve vs sensitivity estimate: %g",Diff))
+        message(sprintf("### deSolve vs Sensitivity shifted Trajectory:\n Sum of absolute differences per time-point: %g",Diff))
  
         par(mfcol = c(2, 1))
         tm <- sol[, "time"]
@@ -223,7 +233,7 @@ load_and_verify <- function(ModelName="HarmonicOscillator"){
     for (g in names(h5f)){
         gl <- gsub("([A-Z])"," \\L\\1\\E",g,perl=TRUE)
         Default <- .defaults(sprintf("%s.h5",ModelName),g)
-        print(Default)
+        ## print(Default)
         h5g <- openGroup(h5f,g)
         verify(h5g,Default,gl)
         h5close(h5g)
