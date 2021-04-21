@@ -79,11 +79,11 @@ and consequently
 ```
 The sensitivity `S(x;k)` of this solution is just the derivative with repsect to `k`: `dy(x;k)/dk`. In R this results in:
 ```R
-    srr1 <- sqrt(1-rr)
-	dwdk <- 1/(2*w)
+srr1 <- sqrt(1-rr)
+dwdk <- 1/(2*w)
 	
-       S <- - a * exp(-r*w*x) * (r*dwdk*x) * cos(srr1*w*x + f) 
-	        - a * exp(-r*w*x) *              sin(srr1*w*x + f) * (srr1*dwdk*x)
+S <- - a * exp(-r*w*x) * (r*dwdk*x) * cos(srr1*w*x + f) 
+     - a * exp(-r*w*x) *              sin(srr1*w*x + f) * (srr1*dwdk*x)
 ```
 
 # Comparisons
@@ -91,10 +91,11 @@ The sensitivity `S(x;k)` of this solution is just the derivative with repsect to
 The R script `verify.R` makes 3 different comparisons: 
 1. Compare the `gsl_odeiv2` calculated trajectory to the exact solution (always with with `F=0`)
 2. Perform a trajectory shift using the sensitivity matrix: `y(x;k+dk)
-   ?= y(x;k) + S*dk`, and compare the shifted trajector to the exact
+   ?= y(x;k) + S(x;k)*dk`, and compare the shifted trajector to the exact
    solution at `k+dk`, where `dk` is a small additive shift.
 3. Perform the same trajectory shift, but compare to a numerical
    solution at `k+dk`, using the deSolve package
    
-The third comparison covers cases, for which the analytical solution is ill-equipped (constant driving forces).
+The third comparison covers cases, for which the analytical solution
+is ill-equipped (constant driving forces).
 
