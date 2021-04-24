@@ -1,5 +1,14 @@
+*.gz
+
 # emacs
 *~
+
+#LaTeX
+*.aux
+*.log
+*.bbl
+*.bcx
+*.pdf
 
 # Prerequisites
 *.d
