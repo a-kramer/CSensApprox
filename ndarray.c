@@ -110,3 +110,80 @@ void ndarray_free(ndarray *a){
     free(a);
   }
 }
+
+ndarray* ndarray_from_string(const char *str){
+  int max_size=40, size=0;
+  ndarray* a=ndarray_alloc(1,&max_size);
+  char *q=NULL,*p=NULL;
+  double d;
+  p=str;
+  while (q!=p) {
+    q=p;
+    d=strtod(q,&p);
+    if (size==max_size){
+      max_size+=20;
+      ndarray_resize(a,max_size);
+    }
+    if (q!=p) {
+      *ndarray_ptr(a,&size)=d;
+      size++;
+    }
+  }
+  return a;
+}
+
+ndarray* ndarray_from_text_file(const char *name){
+  int max_size=40, size=0;
+  ndarray* a=ndarray_alloc(1,&max_size);
+  FILE *f=fopen(name,"r");
+  assert(f);
+  ssize_t m;
+  size_t n;
+  char *comment;
+  char *L=malloc(sizeof(char)*30);
+  char *q=NULL,*p=NULL;
+  double d;
+  while (!eof(f)){
+    m=getline(&L,&n,f);
+    if(m){
+      comment=strchr(L,'#');
+      if (comment) *comment='\0';
+      p=L;
+      while (q!=p) {
+	q=p;
+	d=strtod(q,&p);
+	if (size==max_size){
+	  max_size+=20;
+	  ndarray_resize(a,max_size);
+	}
+	if (q!=p) {
+	  *ndarray_ptr(a,&size)=d;
+	  size++;
+	}
+      }
+    }
+  }
+  ndarray_resize(a,size);
+  return a;
+}
+
+ndarray* ndarray_from_binary_file(const char *name){
+  int max_size=40, size=0;
+  size_t chunk_size=40;
+  ndarray* a=ndarray_alloc(1,&max_size);
+  FILE *f=fopen(name,"r");
+  assert(f);
+  size_t s;
+  double *d;
+  while (!feof(f)){
+    d=ndarray_ptr(a,&size);
+    if (size==max_size){
+      max_size+=(int) chunk_size;
+      ndarray_resize(a,max_size);
+    }    
+    s=fread(d, sizeof(double), chunk_size, f);
+    size+=s;
+  }
+  ndarray_resize(a,size);
+  return a;
+}
