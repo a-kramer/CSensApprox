@@ -4,13 +4,15 @@ LDFLAGS = `pkg-config --libs gsl blas hdf5` -lhdf5_hl
 .PHONY: all
 
 
-all: gsl_odeiv
+all: gsl_odeiv h5attr
 
 
 h5block.o: h5block.c h5block.h
-	gcc $(CFLAGS) -c $< $(LDFLAGS)
+	$(CC) $(CFLAGS) -c $< $(LDFLAGS)
 
 gsl_odeiv: main.c h5block.o ndarray.o solution.o
-	gcc $(CFLAGS) -o $@ $^ $(LDFLAGS) -ldl
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS) -ldl
 
 
+h5attr: h5attr.c ndarray.o
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)

@@ -78,6 +78,15 @@ void ndarray_to_h5(ndarray *a, hid_t loc_id, const char *obj_name){
 }
 
 
+void ndarray_to_h5attr(ndarray *a, hid_t loc_id, const char *obj_name, const char *attr_name){
+  herr_t status=0;
+  assert(a);
+  int rank=a->rank;
+  assert(rank==1);
+  status=H5LTset_attribute_double(loc_id, obj_name, attr_name, a->value, (hsize_t) a->size[0]);
+  assert(status>=0);
+}
+
 
 void ndarray_print(ndarray *a, char *label){
   assert(a);
@@ -129,6 +138,7 @@ ndarray* ndarray_from_string(const char *str){
       size++;
     }
   }
+  ndarray_resize(a,size);
   return a;
 }
 
@@ -138,20 +148,23 @@ ndarray* ndarray_from_text_file(const char *name){
   FILE *f=fopen(name,"r");
   assert(f);
   ssize_t m;
-  size_t n;
+  size_t n=30;
   char *comment;
-  char *L=malloc(sizeof(char)*30);
+  char *L=malloc(sizeof(char)*n);
   char *q=NULL,*p=NULL;
   double d;
-  while (!eof(f)){
+  while (!feof(f)){
     m=getline(&L,&n,f);
     if(m){
       comment=strchr(L,'#');
       if (comment) *comment='\0';
       p=L;
+      q=NULL;
+      //fprintf(stderr,"[%s] line: «%s»\n",__func__,p);
       while (q!=p) {
 	q=p;
 	d=strtod(q,&p);
+	//fprintf(stderr,"[%s] number: %g (q=«%s», p=«%s»)\n",__func__,d,q,p);
 	if (size==max_size){
 	  max_size+=20;
 	  ndarray_resize(a,max_size);

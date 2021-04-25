@@ -1,0 +1,37 @@
+<?xml version="1.0" ?>
+<VectorField Name="LinearSystem" Description="A*x+b.^2 +u">
+<Parameter Name="b1" DefaultValue="0.208391"/>
+<Parameter Name="b2" DefaultValue="0.573322"/>
+<Parameter Name="b3" DefaultValue="0.514099"/>
+<Parameter Name="b4" DefaultValue="0.0668642"/>
+<Parameter Name="b5" DefaultValue="0.737601"/>
+<Parameter Name="b6" DefaultValue="0.588958"/>
+<Parameter Name="u" DefaultValue="1"/>
+<Parameter Name="a11" DefaultValue="-6.52058"/>
+<Parameter Name="a12" DefaultValue="-3.53353"/>
+<Parameter Name="a13" DefaultValue="2.30926"/>
+<Parameter Name="a14" DefaultValue="-0.380922"/>
+<Parameter Name="a15" DefaultValue="-0.939908"/>
+<Parameter Name="a16" DefaultValue="1.65021"/>
+<Parameter Name="a22" DefaultValue="-6.62431"/>
+<Parameter Name="a23" DefaultValue="1.01361"/>
+<Parameter Name="a24" DefaultValue="1.46321"/>
+<Parameter Name="a25" DefaultValue="1.02489"/>
+<Parameter Name="a26" DefaultValue="0.86565"/>
+<Parameter Name="a33" DefaultValue="-7.35738"/>
+<Parameter Name="a34" DefaultValue="0.0453009"/>
+<Parameter Name="a35" DefaultValue="0.660131"/>
+<Parameter Name="a36" DefaultValue="-4.52574"/>
+<Parameter Name="a44" DefaultValue="-1.48795"/>
+<Parameter Name="a45" DefaultValue="-2.0248"/>
+<Parameter Name="a46" DefaultValue="0.00480703"/>
+<Parameter Name="a55" DefaultValue="-3.99313"/>
+<Parameter Name="a56" DefaultValue="-0.539558"/>
+<Parameter Name="a66" DefaultValue="-4.35234"/>
+<StateVariable Name="x1" DefaultInitialCondition="1" Formula="a11*x1+a12*x2+a13*x3+a14*x4+a15*x5+a16*x6"/>
+<StateVariable Name="x2" DefaultInitialCondition="1" Formula="a12*x1+a22*x2+a23*x3+a24*x4+a25*x5+a26*x6"/>
+<StateVariable Name="x3" DefaultInitialCondition="1" Formula="a13*x1+a23*x2+a33*x3+a34*x4+a35*x5+a36*x6"/>
+<StateVariable Name="x4" DefaultInitialCondition="1" Formula="a14*x1+a24*x2+a34*x3+a44*x4+a45*x5+a46*x6"/>
+<StateVariable Name="x5" DefaultInitialCondition="1" Formula="a15*x1+a25*x2+a35*x3+a45*x4+a55*x5+a56*x6"/>
+<StateVariable Name="x6" DefaultInitialCondition="1" Formula="a16*x1+a26*x2+a36*x3+a46*x4+a56*x5+a66*x6"/>
+</VectorField>

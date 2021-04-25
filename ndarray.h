@@ -21,6 +21,7 @@ void ndarray_print(ndarray *a, char *label);
 void ndarray_free(ndarray *a);
 void ndarray_test();
 void ndarray_to_h5(ndarray *a, hid_t loc_id, const char *obj_name);
+void ndarray_to_h5attr(ndarray *a, hid_t loc_id, const char *obj_name, const char *attr_name);
 void ndarray_resize(ndarray *a, int new_size);
 ndarray *ndarray_from_string(const char *str);
 ndarray *ndarray_from_text_file(const char *name);
