@@ -1,24 +1,40 @@
 # Affine System
 
-This example is using the analytical solution to linear ordinary differential equations, to solve the affine system:
+This example is using the analytical solution to linear ordinary
+differential equations, to solve a (random) affine system. The model
+with independent variable _t_ shall have _n_ state variables _x_ and
+the same number of parameters, as well as one scalar input _u_.
+
+```bash
+##   ẋ = f(x,t;p)
+  b[i] = p[i]*p[i]     # i in 0:n-1
+     u = p[n]          # 
+ dx/dt = A*x + b + u,  # with x(0) = x0
 ```
-b[i]=p[i]^2
-dx/dt = A*x + b + u,  with x(0) = x0
-```
-where `p` is the parameter vector (same size as `x`).
+where `p` is this model's parameter vector (same size as `x`). As
+mentioned in the other examples many solvers have a single slot for
+parameters in the expected function interface, so _p_ contains both
+the parameters that we presume as being subject to later optimization
+_b_ as well as an input to the model _u_, which is a known parameter
+that distibguishes different experiments (experimental conditions).
 
 For this example we use [GNU
-Octave](https://www.gnu.org/software/octave/index).
+Octave](https://www.gnu.org/software/octave/index) to set up a model
+and also to evaluate the simulation results.
 
 ## HDF5 Attributes
 
-GNU Octave has built-in support for hdf5 files. The function `load()`
-can read generic hdf5 files and `save()` can write _GNU Octave_
-specific files. 
+[GNU Octave](https://www.gnu.org/software/octave/index) has built-in
+support for hdf5 files. The function `load()` can read generic hdf5
+files and `save()` can write _GNU Octave_ specific files. It's not
+very flexible and we need to work around some limitations.
 
-However, `load()` does not support reading ATTRIBUTES of hdf5 data
-sets. Writing them is also not possible. Instead, `load()` will import
-all datasets (into nested structs if necessary).
+The standard `load()` function does not support reading ATTRIBUTES of
+hdf5 data sets. Writing them is not possible either. Instead, `load()`
+will import all datasets into the main scope (as nested structure
+arrays if necessary, see [hdf5
+groups](https://support.hdfgroup.org/HDF5/doc1.6/UG/09_Groups.html),
+groups are similar to file system folders/directories).
 
 We solve this problem by using hdf5 command line tools instead when
 writing to hdf5 files. Here is an example (in bash):
@@ -27,9 +43,8 @@ H5F=LinearSystem.h5
 DATASET=/data/trajectory
 h5import trajectory.double -d 6,$((2**7)) -p $DATASET -s 64 -o $H5F
 ```
-
 However, the hdf5 toolchain does not include a way to write
-ATTRIBUTES. h5import only imports DATASETS. 
+ATTRIBUTES. h5import only imports DATASETS (as far as we know). 
 
 For this reason we provide the program `h5attr`, it has a similar interface:
 ```
