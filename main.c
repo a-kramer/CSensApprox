@@ -577,6 +577,41 @@ read_tspan(char *val)/*a string of the form "a:b:c" or "a b c". */{
   return t;
 }
 
+void test_evaluation(gsl_odeiv2_system sys, jacp dfdp, gsl_vector *y0, gsl_vector *par){
+  //test evaluation:
+  size_t d=sys.dimension;
+  int jacp_size=d*par->size;
+  double *Jy=malloc(sizeof(double)*(d*d));
+  double *Jp=malloc(sizeof(double)*jacp_size);
+  double *f=malloc(sizeof(double)*d);
+  int i;
+  // f
+  sys.function(0,y0->data,f,par->data);
+  fprintf(stderr,"[%s] test evaluation of right hand side function (f):\n",__func__);
+  for (i=0;i<d;i++) fprintf(stderr,"%g ",f[i]);
+  fprintf(stderr,"\n\n");
+  fflush(stderr);
+
+  //jacp
+  dfdp(0,y0->data,Jp,par->data);
+  fprintf(stderr,"[%s] test evaluation of jacp (df/dp):\n",__func__);
+  for (i=0;i<jacp_size;i++) fprintf(stderr,"%g ",Jp[i]);
+  fprintf(stderr,"\n (that was a flat %li × %li matrix)\n",d,par->size);
+  fflush(stderr);
+  // jac
+
+  sys.jacobian(0,y0->data,Jy,f,par->data);
+  fprintf(stderr,"[%s] test evaluation of jacobian (df/dy):\n",__func__);
+  for (i=0;i<d*d;i++) fprintf(stderr,"%g ",Jy[i]);
+  fprintf(stderr,"\n (that was a flat %li × %li matrix)\n",d,d);
+  fflush(stderr);
+  free(Jy);
+  free(Jp);
+  free(f);
+
+
+}
+
 
 /* This prgram loads an ODE model, specified for the `gsl_odeiv2`
    library. The initial value problems are specified in an hdf5 file,
@@ -601,7 +636,7 @@ main(int argc, char *argv[]){
   double *t=NULL;
   ndarray_test();
   for (i=1;i<argc;i++){
-    fprintf(stderr,"[%s] %s=%s\n",__func__,argv[i],argv[i+1]);
+    fprintf(stderr,"[%s] %s=%s\n",__func__,argv[i],argv[i+1]); fflush(stderr);
     if (option_is("-m","--model",argv[i])){
       i++;
       model_name=strdup(argv[i]); //malloc(sizeof(char)*(strlen(argv[i])+1));
@@ -629,7 +664,7 @@ main(int argc, char *argv[]){
   }
   if (!t) t=read_tspan("0 0 0");
   fprintf(stderr,"[%s] t: %g:%g:%g\n",__func__,t[0],t[1],t[2]);
-
+  fflush(stderr);
   if (!model_name) model_name=first_so();
   assert(model_name);
   
@@ -654,25 +689,36 @@ main(int argc, char *argv[]){
   gsl_vector *par=gsl_vector_alloc(mu->size + nu);
   gsl_vector_view p=gsl_vector_subvector(par,0,mu->size);
   gsl_vector_view u=gsl_vector_subvector(par,mu->size,nu);
+  // initialize:
   gsl_vector_memcpy(&(p.vector),mu);
+  gsl_vector_memcpy(&(u.vector),sim[0].u);
+  
   for (i=0;i<mu->size;i++) par->data[i]=exp(par->data[i]);
+
+  // load system from file and test it
   jacp dfdp;
   gsl_odeiv2_system sys = load_system(model_name, d, par->data, &dfdp);
-  //test evaluation:
-  int jacp_size=d*par->size;
-  double *J=malloc(sizeof(double)*jacp_size);
-  gsl_vector_memcpy(&(u.vector),sim[0].u);
-  dfdp(0,sim[0].y0->data,J,par->data);
-  fprintf(stderr,"[%s] test evaluation of jacp\n",__func__);
-  for (i=0;i<jacp_size;i++) fprintf(stderr,"%g ",J[i]);
-  fprintf(stderr,"\n\n");
+  fprintf(stderr,
+	  "[%s] ode system dim: %li and %li parameters (%li inputs) with parameters:\n",
+	  __func__,
+	  sys.dimension,
+	  par->size,
+	  nu);
+  for (i=0;i<mu->size;i++) fprintf(stderr,"%g ",((double*) sys.params)[i]);
+  fprintf(stderr,"(that is exp(mu))\n");
+  
+  test_evaluation(sys,dfdp,sim[0].y0,par);
+
   const gsl_odeiv2_step_type * T=gsl_odeiv2_step_msbdf;
   gsl_odeiv2_driver *driver=gsl_odeiv2_driver_alloc_y_new(&sys,T,h,abs_tol,rel_tol);
+  fprintf(stderr,"[%s] driver allocated with tolearances: abs_tol=%g and rel_tol=%g\n",
+	 __func__,abs_tol,rel_tol);
   char *h5out_name = model_function(model_name,"_out.h5");
+  fprintf(stderr,"[%s] output file: %s\n",__func__,h5out_name); 
   hid_t h5f = H5Fcreate(h5out_name,H5F_ACC_TRUNC,H5P_DEFAULT,H5P_DEFAULT);
   assert(h5f);
+
   // the most CPU work happens here:
-  
   solution_t **solution=simulate_evolve(sys,driver,sim,N,t,&(u.vector),par,dfdp,h5f);
   gsl_odeiv2_driver_free(driver);
   H5Fclose(h5f);
