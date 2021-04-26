@@ -19,8 +19,9 @@ _b_ as well as an input to the model _u_, which is a known parameter
 that distibguishes different experiments (experimental conditions).
 
 For this example we use [GNU
-Octave](https://www.gnu.org/software/octave/index) to set up a model
-and also to evaluate the simulation results.
+Octave](https://www.gnu.org/software/octave/index) and command line
+tools to create a model and simulation instruction file. And _GNU
+Octave_ again to evaluate the simulation results.
 
 ## HDF5 Attributes
 
@@ -47,7 +48,7 @@ However, the hdf5 toolchain does not include a way to write
 ATTRIBUTES. h5import only imports DATASETS (as far as we know). 
 
 For this reason we provide the program `h5attr`, it has a similar interface:
-```
+```bash
 h5attr -d $DATASET -a index -s 0 $H5F
 h5attr -d $DATASET -a time time.txt $H5F
 ```
@@ -78,7 +79,7 @@ regardless.
 A text file that is acceptable to `h5attr` can be written using the `save()`
 function, by hand or any other method (like `printf()`). A binary file
 can be written like this:
-```
+```matlab
 fid=fopen("trajectory.double","w");
 fwrite(fid,X,"double");
 fclose(fid);
