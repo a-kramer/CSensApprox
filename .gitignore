@@ -10,7 +10,7 @@
 *.log
 *.bbl
 *.bcx
-*.pdf
+
 
 # Prerequisites
 *.d

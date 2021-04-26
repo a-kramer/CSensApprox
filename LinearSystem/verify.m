@@ -1,6 +1,6 @@
 #!/usr/bin/octave-cli -q
-set(0,"defaultaxeslinewidth",2);
-set(0,"defaultlinelinewidth",2);
+#set(0,"defaultaxeslinewidth",2);
+#set(0,"defaultlinelinewidth",2);
 set(0,"defaulttextinterpreter","none");
 set(0,"defaultaxesfontname","Fira Sans");
 set(0,"defaulttextfontname","Fira Sans");
@@ -46,7 +46,7 @@ function [x_dp] = parameter_shifted(x,t,S,p,dp)
 endfunction
 
 function [NormMt,varargout]=norm_time_series(M)
-  nt=size(M,3)
+  nt=size(M,3);
   NormMt=NA(nt,1);
   for i=1:nt
     NormMt(i)=norm(M(:,:,i));
@@ -93,18 +93,18 @@ u=1.0;
 [aX,aS]=analytical_solution(A,x0,tt,b,u);
 plot(tt,aX);
 title("analytical solution");
-xlabel("t");
-ylabel("x(t)");
+xlabel("$t$");
+ylabel("$x(t)$");
 xlim([0,1]*tf);
 
 subplot(2,2,3); cla;
 u=1.0;
 tt=trajectory.time;
 [aX,aS]=analytical_solution(A,x0,tt,b,u);
-plot(tt,sum(abs(aX-cX),2));
+semilogy(tt,1e-9+sum(abs(aX-cX),2));
 title("Difference between gsl and analytical solution");
-xlabel("t");
-ylabel('\sum_i |x_i(t) - x_i(t;gsl)|');
+xlabel("$t$");
+ylabel('$\sum_i |x_i(t) - x_i(t;\texttt{gsl})|$');
 xlim([0,1]*tf);
 
 
@@ -112,9 +112,9 @@ subplot(2,2,4); cla;
 load LinearSystem.h5
 load time.txt
 plot(data.trajectory)
-ht=title("lsode solution in GNU Octave");
-xlabel("t");
-ylabel("x(t)");
+title('lsode solution in \emph{GNU Octave}');
+xlabel("$t$");
+ylabel("$x(t)$");
 xlim([0,1]*tf);
 
 set(gca,"fontname","Fira Sans");
@@ -124,19 +124,18 @@ set(gcf,"paperposition",[0,0,20,16]);
 print("Trajectory.tex","-dpdflatex");
 
 nb=length(b);
-ci=40;
+tc=5;
+ci=find(tt<tc,1,'last');
 cS=permute(trajectory.sensitivity,[2,1,3])(:,1:nb,:);
 S_err = norm(sum(abs(cS(:,:,1:ci)-aS(:,:,1:ci)),3))/ci;
 printf("average sensitivity error up to t=%g (before it diverges): %g\n",tt(ci),S_err);
-
-
-ok = ~permute(any(any(isnan(cS),1),2) | any(any(isinf(cS) | any(any(cS>100)),1),2),[3,1,2]);
 
 dt=diff(tt);
 
 figure(2); clf;
 subplot(2,2,1); cla;
-in_tspan=tt>=0.5 & tt<=1;
+tspan=[0.5,1];
+in_tspan=tt>=tspan(1) & tt<=tspan(2);
 [fi_t,sv1,w,v]=fisher_information(cS(:,:,in_tspan));
 boxplot(tt(in_tspan)-dt(in_tspan)/7,sv1,
 	"face color",[0.6,0.6,1.0],
@@ -149,12 +148,14 @@ boxplot(tt(in_tspan)+dt(in_tspan)/7,sv2,
 	"width",0.25,
 	"edge color",[0.5,0.2,0.1],
 	"median",[0.6,0.1,0.1]);
-xlabel("t");
-ylabel("singular values of S(t) [svd]");
-title("gsl odeiv2 solution (blue) analytical (orange)");
+xlim(tspan);
+xlabel('$t$');
+ylabel('singular values of $S(t)$ \texttt{svd}');
+title('gsl odeiv2 solution (blue) analytical (orange)');
 
 subplot(2,2,2); cla;
-in_tspan=tt>=2.0 & tt<=4;
+tspan=[2,4]
+in_tspan=tt>=tspan(1) & tt<=tspan(2);
 [cFI_t,sv3,w,v]=fisher_information(cS(:,:,in_tspan));
 boxplot(tt(in_tspan)-dt(in_tspan)/7,sv3,
 	"face color",[0.6,0.6,1.0],
@@ -167,22 +168,24 @@ boxplot(tt(in_tspan)+dt(in_tspan)/7,sv4,
 	"width",0.25,
 	"edge color",[0.5,0.2,0.1],
        	"median",[0.6,0.1,0.1]);
-xlabel("t");
-ylabel("singular values of S(t) [svd]");
-title("gsl odeiv2 solution");
+xlim(tspan);
+xlabel('$t$');
+ylabel('singular values of $S(t)$ \texttt{svd}');
+title('gsl odeiv2 solution (blue) analytical (orange)');
 
 [aN,aRC]=norm_time_series(aFI_t);
 [cN,cRC]=norm_time_series(cFI_t);
 subplot(2,2,3); cla;
 plot(tt(in_tspan),aN,";analytical;",tt(in_tspan),cN,";gsl;");
-xlabel("t");
-ylabel("norm(FI)");
+xlabel("$t$");
+ylabel('$\|\texttt{FI}(t)\|$');
 title("Fisher Information (norm)");
 
 subplot(2,2,4); cla;
-plot(tt(in_tspan),aRC,";analytical;",tt(in_tspan),cRC,";gsl;");
-xlabel("t");
-ylabel("rcond(FI)");
+l=-round(log10(max(aRC)));
+plot(tt(in_tspan),aRC*10^l,";analytical;",tt(in_tspan),cRC*10^l,";gsl;");
+xlabel("$t$");
+ylabel(sprintf('$\\text{rcond}(\\texttt{FI}) / 10^{-%i}$',l));
 title("Fisher Information (reciprocal condition number)");
 
 set(gca,"fontname","Fira Sans");

@@ -1,0 +1,137 @@
+\documentclass[utf8,english,DIV=12]{scrartcl}
+\usepackage[osf]{mathpazo}
+\usepackage{FiraSans,FiraMono}
+%\usepackage[ttdefault=true]{AnonymousPro}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[names,dvipsnames]{xcolor}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{microtype}
+\usepackage{graphicx}
+\newcommand{\diag}{\text{diag}}
+
+\frenchspacing
+\setcapindent{0em}
+\addtokomafont{captionlabel}{\bfseries}
+\addtokomafont{caption}{\sffamily}
+\addtokomafont{pagenumber}{\sffamily}
+\pagestyle{headings}
+
+\author{AK <andreikr@kth.se>}
+\date{\today}
+\title{Solution to Affine System}
+\subject{Sensitivity Approximation and Verification}
+
+\begin{document}
+\maketitle
+
+\section{Model Definition}
+\label{sec:model}
+
+The general model is an ordinary differential equation:
+\begin{align}
+  \dot x&=f(x,t;p)\, & x\in\mathbb{R}^n, p\in\mathbb{R}^n\,,\\
+  x(0) &= x_0\,, & S(x,t;p)_i^{~j}&=\frac{dx_i(t;p)}{dp_j}\,,
+\end{align}
+where $p$ is a parameter vector and $S$ the sensitivity matrix. 
+
+\subsection{Affine System}
+\label{sec:affine}
+
+Here, we have a constant Jacobian $\Gamma$ and further restrict:
+\begin{align}
+  \dot x&=\Gamma x + b\, & b_i&=p_i^2\,\label{eq:affine}\\
+\end{align}
+This can be transformed to a linear system:
+\begin{equation}
+  \begin{split}
+  L&=\Gamma^{-1}\,,\\
+  z&=x+L b\,,\\
+  \dot z&=\Gamma z\,,
+  \end{split}\label{eq:linear}
+\end{equation}
+where we define $L$ to ease notation. The solution to \eqref{eq:linear} is:
+\begin{equation}
+  z(t) = \exp\left(\Gamma t\right) z_0\,,
+\end{equation}
+and consequently:
+\begin{equation}
+  x(t;p) = \exp\left(\Gamma t\right) (x_0 + Lb) - Lb \,.\label{eq:sol}
+\end{equation}
+
+The analytical sensitivity of~\eqref{eq:sol} is:
+\begin{align}
+  E_\Gamma(t) &=\exp\left(\Gamma t\right)\,,\\
+  x(t;p) &= E_\Gamma(t) (x_0 + Lb) - Lb {\color{gray}+ u}& b_i:&= p_i^2\,,\\
+  (Lb)_i &=\sum_j L_{ij} b_j\,,& \frac{d(Lb)_i}{dp_k}&= 2\sum_j L_{ij}p_j [j=k]\,,\\
+  \Rightarrow \frac{dLb}{dp} &= 2 L\,\diag(p)\,,&
+  \frac{dx(t;p)}{dp} &=2 E_\Gamma(t) L\,\diag(b) - L\,\diag(b)\,,
+\end{align}
+where
+\begin{equation}
+  [\text{condition}] = \left\{
+    \begin{array}{cl}
+      1&\text{condition is true}\\
+      0&\text{otherwise}
+    \end{array}\right.
+  \label{eq:logical}
+\end{equation}
+Without changing the calculations for the sensitivity we can add an input $u$ to the
+model for the possibility of different simulation runs.
+
+\section{Numerical Solution}
+\label{sec:gsl}
+
+We use the results from Section~\ref{sec:model} to verify the accuracy
+of the numerical solution of the initial value
+problem~\eqref{eq:affine}. We use the \emph{GNU Scientific Library} (\texttt{gsl}) to
+obtain a numerical solution $x$ and approximate the sensitivity. The
+results of the returned trajectory at discrete time points $t_j$ is
+displayed in Figure~\ref{fig:trajectory}, the solution is within
+specified error tolerances. The accuracy of the estimated sensitivity
+matrix is displayed in Figure~\ref{fig:fi}. Since we are
+interested in parameter estimation, we also investigate the Fisher
+information of a likelihood function that assumes a Gaussian error
+when measuring data (the data corresponds to the state variables in
+the model). Since this is a test for the sensitivity approximation, we
+don't actually need data, so we set the measurement noise to an additive unit
+Gaussian model: $\mathcal{N}(0,I_n)$ (iid).
+
+Then the Fisher information $F(p)$ is related to the sensitivity as:
+\begin{align}
+  F(p) = \sum_j \underbrace{S(x(t_j),t_j;p)^{\text{T}} S(x(t_j),t_j;p)}_{\texttt{FI}(t_j;p)}\,,
+\end{align}
+where we also define the fisher information per time point: $\texttt{FI}(t;p)$.
+
+\begin{figure}
+  \centering\sffamily\firalining
+  \hspace*{-2cm}\input{Trajectory}
+  \caption[trajectory accuracy of gsl solvers]{Accuracy of the
+    trajectory $x(t_j)$ using the gsl solvers in
+    \texttt{gsl\_odeiv2.h} as compared to the analytical
+    solution~\eqref{eq:sol}. For completeness, we also include the
+    numerical solution from \emph{GNU Octave}'s \texttt{lsode} solver
+    for stiff problems. Bottom left: the absolute difference between
+    the trajectories, summed over all state variables.}
+\label{fig:trajectory}
+\end{figure}
+
+\begin{figure}
+  \centering\sffamily\firalining
+  \hspace*{-2cm}\input{FisherInformation}
+  \caption[Sensitivity Approximation]{The accuracy of the sensitivity
+    matrix is summarized as a box-and-whisker plot of the singular
+    values of $S(x,t;p)$ (singular value decomposition, per time
+    point), this is to reduce visual clutter, not to imply that the
+    values are random. In (blue) the approximated sensitivity, in
+    (orange) the analytical solution. The numerical approximation
+    eventually diverges, when the system approaches steady
+    state. Lower panels show the accuracy of the Fisher information:
+    $\texttt{FI} = S^{\text{T}}S$ (this is assuming a Gaussian error
+    model with unit noise parameter and corresponding Likelihood
+    function).}
+\label{fig:fi}
+\end{figure}
+
+\end{document}
