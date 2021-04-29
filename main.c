@@ -275,10 +275,10 @@ void sensitivity_approximation(solution_t *solution)/* solution struct from a nu
   gsl_matrix_view PHI_fwd, PHI_bwd;
   gsl_matrix *S_temp=gsl_matrix_alloc(ny,np);
   assert(S_temp);
-
+  
   for (j=1;j<nt;j++){
-    gsl_matrix_set_zero(S_temp);
     index[2]=j; // current time index
+    gsl_matrix_set_zero(S_temp);
     Sf=gsl_matrix_view_array(ndarray_ptr(solution->Sy,index),ny,np);
     Jf=gsl_matrix_view_array(ndarray_ptr(solution->Jy,index),ny,ny);
     Bf=gsl_matrix_view_array(ndarray_ptr(solution->Jp,index),ny,np);
@@ -291,19 +291,24 @@ void sensitivity_approximation(solution_t *solution)/* solution struct from a nu
     Ji=gsl_matrix_view_array(ndarray_ptr(solution->Jy,index),ny,ny);
     Bi=gsl_matrix_view_array(ndarray_ptr(solution->Jp,index),ny,np);
     ti=ndarray_value(solution->t,&(index[2]));
-
-    transition_matrix_v2(&Ji.matrix,&Jf.matrix,ti,tf,PHIf);
-    transition_matrix_v2(&Jf.matrix,&Ji.matrix,tf,ti,PHIb);
-
-    PHI_fwd=gsl_matrix_view_array(PHIf,ny,ny);
-    PHI_bwd=gsl_matrix_view_array(PHIb,ny,ny);
     
-    // Sf = PHI(k+1,k) * (0.5*dt*(PHI(k,k+1)*B(k+1) + B(k)) + Si )
-    gsl_blas_dgemm(CblasNoTrans,CblasNoTrans, 1.0, &PHI_bwd.matrix, &Bf.matrix, 0.0, S_temp);
-    gsl_matrix_add(S_temp,&Bi.matrix);
-    gsl_matrix_scale(S_temp,0.5*(tf-ti));
-    gsl_matrix_add(S_temp,&Si.matrix);
-    gsl_blas_dgemm(CblasNoTrans,CblasNoTrans, 1.0, &PHI_fwd.matrix, S_temp, 0.0, &Sf.matrix);
+    if (is_in_steady_state(solution->y)){
+      
+    } else {
+      
+      transition_matrix_v2(&Ji.matrix,&Jf.matrix,ti,tf,PHIf);
+      transition_matrix_v2(&Jf.matrix,&Ji.matrix,tf,ti,PHIb);
+      
+      PHI_fwd=gsl_matrix_view_array(PHIf,ny,ny);
+      PHI_bwd=gsl_matrix_view_array(PHIb,ny,ny);
+      
+      // Sf = PHI(k+1,k) * (0.5*dt*(PHI(k,k+1)*B(k+1) + B(k)) + Si )
+      gsl_blas_dgemm(CblasNoTrans,CblasNoTrans, 1.0, &PHI_bwd.matrix, &Bf.matrix, 0.0, S_temp);
+      gsl_matrix_add(S_temp,&Bi.matrix);
+      gsl_matrix_scale(S_temp,0.5*(tf-ti));
+      gsl_matrix_add(S_temp,&Si.matrix);
+      gsl_blas_dgemm(CblasNoTrans,CblasNoTrans, 1.0, &PHI_fwd.matrix, S_temp, 0.0, &Sf.matrix);
+    }
   }
   gsl_matrix_free(S_temp);
 }
@@ -335,8 +340,8 @@ simulate(gsl_odeiv2_system sys, /* the system to integrate */
   solution_t **solution=malloc(sizeof(solution_t*)*N);
   int index[3]={0,0,0};
   double t,tf,dt;
-  double *Jy,*Jp;
-  double *dfdt=malloc(sizeof(double)*d);
+  double *Jy,*Jp,*f;
+  double dfdt[d];
   size_t n;
   hid_t g_id;
   int status;
@@ -383,9 +388,10 @@ simulate(gsl_odeiv2_system sys, /* the system to integrate */
 	printf("\n");
 	index[2]=j;
 	y_ptr = ndarray_ptr(solution[i]->y,&(index[1]));
-	
+	f = ndarray_ptr(solution[i]->f,&(index[1]));
 	Jy = ndarray_ptr(solution[i]->Jy,index);
 	Jp = ndarray_ptr(solution[i]->Jp,index);
+	sys.function(t, y->data, f, dfdt, par->data);
 	sys.jacobian(t, y->data, Jy, dfdt, par->data);
 	dfdp(t, y->data, Jp, par->data);
 	memcpy(y_ptr,y->data,sizeof(double)*(y->size));
@@ -400,6 +406,7 @@ simulate(gsl_odeiv2_system sys, /* the system to integrate */
     sensitivity_approximation(solution[i]);
     if (h5f){
       ndarray_to_h5(solution[i]->y,g_id,"state");
+      ndarray_to_h5(solution[i]->f,g_id,"f");
       ndarray_to_h5(solution[i]->t,g_id,"time");
       ndarray_to_h5(solution[i]->Jy,g_id,"jac");
       ndarray_to_h5(solution[i]->Jp,g_id,"jacp");
@@ -439,8 +446,8 @@ simulate_evolve(gsl_odeiv2_system sys, /* the system to integrate */
   solution_t **solution=malloc(sizeof(solution_t*)*N);
   int index[3]={0,0,0};
   double t,tf;
-  double *Jy,*Jp,*y_ptr;
-  double *dfdt=malloc(sizeof(double)*d);
+  double *Jy,*Jp,*y_ptr,f;
+  double dfdt[d];
   size_t n,n_max=100;
   hid_t g_id;
   int status;
@@ -476,9 +483,11 @@ simulate_evolve(gsl_odeiv2_system sys, /* the system to integrate */
       printf("\n");
       index[2]=n;
       y_ptr = ndarray_ptr(solution[i]->y,&(index[1]));
+      f = ndarray_ptr(solution[i]->f,&(index[1]));
       Jy = ndarray_ptr(solution[i]->Jy,index);
       Jp = ndarray_ptr(solution[i]->Jp,index);
-      sys.jacobian(t, y->data, Jy, dfdt, par->data);
+      sys.function(t, y->data, Jy, dfdt, par->data);
+      sys.jacobian(t, y->data, f, par->data);
       dfdp(t, y->data, Jp, par->data);
       
       memcpy(y_ptr,y->data,sizeof(double)*(y->size));
@@ -512,6 +521,7 @@ simulate_evolve(gsl_odeiv2_system sys, /* the system to integrate */
     sensitivity_approximation(solution[i]);
     if (h5f){
       ndarray_to_h5(solution[i]->y,g_id,"state");
+      ndarray_to_h5(solution[i]->f,g_id,"f");
       ndarray_to_h5(solution[i]->t,g_id,"time");
       ndarray_to_h5(solution[i]->Jy,g_id,"jac");
       ndarray_to_h5(solution[i]->Jp,g_id,"jacp");

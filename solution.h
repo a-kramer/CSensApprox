@@ -9,6 +9,7 @@
 typedef struct {
   ndarray *t;
   ndarray *y;
+  ndarray *f;
   ndarray *Jy;
   ndarray *Jp; 
   ndarray *Sy;

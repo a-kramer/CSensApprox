@@ -10,7 +10,7 @@
 \usepackage{microtype}
 \usepackage{graphicx}
 \newcommand{\diag}{\text{diag}}
-
+\newcommand{\grad}{\ensuremath{\nabla}}
 \frenchspacing
 \setcapindent{0em}
 \addtokomafont{captionlabel}{\bfseries}
@@ -18,13 +18,20 @@
 \addtokomafont{pagenumber}{\sffamily}
 \pagestyle{headings}
 
-\author{AK <andreikr@kth.se>}
+\author{Andrei Kramer <andreikr@kth.se>}
 \date{\today}
 \title{Solution to Affine System}
 \subject{Sensitivity Approximation and Verification}
 
 \begin{document}
 \maketitle
+\begin{abstract}
+  \noindent Here we make use of a system with readily available analytical
+  solutions: linear and affine systems. For this series of tests, the
+  number of state variables can be arbitrarily large. This makes
+  timing tests easy to do, without compromising the validity of the
+  analytical solution. We generate a system with a symmetrical, negative definite Jacobian of arbitrary size using a \emph{pseudo-random number generator}.
+\end{abstract}
 
 \section{Model Definition}
 \label{sec:model}
@@ -65,8 +72,8 @@ The analytical sensitivity of~\eqref{eq:sol} is:
   E_\Gamma(t) &=\exp\left(\Gamma t\right)\,,\\
   x(t;p) &= E_\Gamma(t) (x_0 + Lb) - Lb {\color{gray}+ u}& b_i:&= p_i^2\,,\\
   (Lb)_i &=\sum_j L_{ij} b_j\,,& \frac{d(Lb)_i}{dp_k}&= 2\sum_j L_{ij}p_j [j=k]\,,\\
-  \Rightarrow \frac{dLb}{dp} &= 2 L\,\diag(p)\,,&
-  \frac{dx(t;p)}{dp} &=2 E_\Gamma(t) L\,\diag(b) - L\,\diag(b)\,,
+  \Rightarrow \grad_p(Lb) &= 2 L\,\diag(p)\,,&
+  \grad_px(t;p) &=2 (E_\Gamma(t) -I_n)L\,\diag(b)\,,
 \end{align}
 where
 \begin{equation}
@@ -74,9 +81,11 @@ where
     \begin{array}{cl}
       1&\text{condition is true}\\
       0&\text{otherwise}
-    \end{array}\right.
+    \end{array}\right.\,,
   \label{eq:logical}
 \end{equation}
+and $(I_n)_{ij}=[i=j]$.
+
 Without changing the calculations for the sensitivity we can add an input $u$ to the
 model for the possibility of different simulation runs.
 

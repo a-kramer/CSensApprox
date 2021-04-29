@@ -1,0 +1,221 @@
+\documentclass[utf8,english,DIV=12]{scrartcl}
+\usepackage[osf]{mathpazo}
+\usepackage{FiraSans}
+\usepackage[ttdefault=true]{AnonymousPro}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[names,dvipsnames]{xcolor}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{microtype}
+\usepackage{graphicx}
+\usepackage{listings}
+\lstset{
+  basicstyle=\ttfamily\footnotesize,%
+  captionpos=b,                    % sets the caption-position to bottom
+  commentstyle=\color{green!50!black},    % comment style
+  keepspaces=true,                 % keeps spaces in text, useful for keeping indentation of code (possibly needs columns=flexible)
+  keywordstyle=\color{blue},       % keyword style
+  language=R,                 % the language of the code
+  numbers=left,                    % where to put the line-numbers; possible values are (none, left, right)
+  numbersep=5pt,                   % how far the line-numbers are from the code
+  numberstyle=\tiny\color{gray}, % the style that is used for the line-numbers
+  showstringspaces=true,          % underline spaces within strings only
+  showtabs=true,                  % show tabs within strings adding particular underscores
+  stepnumber=3,                    % the step between two line-numbers. If it's 1, each line will be numbered
+  stringstyle=\color{Bittersweet},     % string literal style
+}
+
+\newcommand{\diag}{\text{diag}}
+
+\frenchspacing
+\setcapindent{0em}
+\addtokomafont{captionlabel}{\bfseries}
+\addtokomafont{caption}{\sffamily}
+\addtokomafont{pagenumber}{\sffamily}
+\pagestyle{headings}
+
+\author{Andrei Kramer <andreikr@kth.se>}
+\date{\today}
+\title{Solution to Harmonic Oscillator}
+\subject{Sensitivity Approximation and Verification}
+
+\begin{document}
+\maketitle
+\begin{abstract}
+  \noindent This part of the documentation justifies the expressions used in
+  \texttt{verify.R} where we check the results of the sensitivity
+  approximation method against the expected analytical result. The
+  solution to the initial value problem of the Harmonic Oscillator is
+  of course well known. The important part is its
+  parameter-sensitivity (parameter derivative). We treat the damping
+  parameter $c$ as a system input and the coefficiant $k$ of the main
+  \emph{restoring force} as the \emph{interesting} parameter for sensitivity
+  calculations. This choice is arbitrary.
+\end{abstract}
+\section{Model Definition}
+\label{sec:model}
+
+We will use a dampened harmonic oscillator model with unit mass: 
+\begin{equation}
+  \label{eq:ivp}
+  \ddot y = -ky -c \dot y \,,
+\end{equation}
+to compare numerical $k$-sensitivity approximation methods to the
+analytical solution sensitivity. This model is well suited for the
+purpose of illustration as the sensitivity is a scalar function.
+
+To use ordinary differential equation solvers, we reformulate the
+model as a system of equatuions, with order one:
+\begin{align}
+  \dot v&=-ky -c v\,,&v(0)&=v_0\label{eq:y}\\
+  \dot y&=v\,,&y(0)&=y_0\label{eq:v}\\
+\end{align}
+This system has a known analytical solution:
+\begin{equation}
+  \label{eq:sol}
+  \begin{split}
+    \omega&=\sqrt{k}\,,\\
+    r&=\frac{c}{2\omega}\,,\\
+    \Rightarrow r\omega&=\frac{c}{2}\,,\\
+    y(t;k)&=a\exp(-r\omega t)\cos(\sqrt{1-r^2}\omega t+\phi)\,,\\
+    \Rightarrow v(t;k)&=-a\exp(-r\omega t)(r\omega)\cos(\sqrt{1-r^2}\omega t+\phi)\\
+    &\quad~- a\exp(-r\omega t)\sin(\sqrt{1-r^2}\omega t+\phi) \sqrt{1-r^2}\omega\,,\\
+    &=-y(t;k)\left(r\omega + \tan(\sqrt{1-r^2}\omega t+\phi) \sqrt{1-r^2}\omega\right)\,,
+  \end{split}
+\end{equation}
+where $a$ and $\phi$ are to be determined from the initial conditions
+$v_0$ and $y_0$:
+\begin{equation}
+  \label{eq:init}
+  \begin{split}
+    y(0;k)&=a\cos(\phi)=y_0\,,\\
+    v(0;k)&=-y_0r\omega-y_0\tan(\phi)\sqrt{1-r^2}\omega=v_0 \,,
+  \end{split}
+\end{equation}
+In Section~\ref{sec:proof} we show that \eqref{eq:sol} solves the
+ordinary differential equation~\eqref{eq:ivp}.
+
+All four constants $a$, $\omega$, $\phi$, and $r$ are functions of $(k,c)$, so we could instead write:
+$a(k,c)$, $r(k,c)$, etc.. But, to ease notation and avoid too many
+parentheses, we will instead note the dependence on $k$ via
+subscripts. Since we are interested in the sensitivity of $y$ only
+with repsect to $k$ we will drop the dependence on $c$ in notation.
+
+\subsection{Phase and Amplitude}
+\label{sec:aphi}
+
+We solve the initial value equations~\eqref{eq:init} for $\phi$:
+\begin{align}
+    \frac{v_0 + y_0r_k\omega_k}{y_0\sqrt{1-r_k^2}\omega_k} &= - \tan(\phi_k)\,\,,\label{eq:tanphi}\\
+    \arctan\left(-\frac{2v_0 + y_0{c}}{2y_0\sqrt{1-r_k^2}\omega_k}\right) &= \phi_k\,.\label{eq:phi}
+\end{align}
+Here, we note that this solution for $\phi$ is also a function of $k$ and append this note as a subscript. 
+This result makes $a$ immediately available as
+\begin{equation}
+  \label{eq:a}
+  a_k = \frac{y_0}{\cos(\phi_k)}\,,
+\end{equation}
+where we make the dependence on $k$ noted once again. We disregard the dependence on 
+
+\subsection{Sensitivity}
+\label{sec:sens}
+
+Because we are calculating the derivative with respect to $k$ it is
+useful to rewrite the solution and make it explicit when a term does
+depend on $k$, and show where $k$ cancels:
+\begin{equation}
+  \label{eq:yk}
+  \begin{split}
+    \Gamma_k:&=\sqrt{1-r_k^2}\,,\\
+    \Gamma_k\omega_k&=\sqrt{1-\left(\frac{c}{2\sqrt{k}}\right)^2}\sqrt{k}=\sqrt{k-\frac{c^2k}{4k}}=\sqrt{k-\frac{c^2}{4}}\,,\\
+  \Rightarrow y(t;k)&=a\exp\left(-\frac{c}{2}t\right)\cos\left(t\sqrt{k-\frac{c^2}{4}}+\phi_k\right)\,,
+\end{split}
+\end{equation}
+
+
+The sensitivity of the solution $y(t;k)$ with respect to the parameter $k$ can be
+obtained by straight forward differentiation, albeit with many terms. We collect a list of derivatives:
+\begin{align}
+  a_k &= \frac{y_0}{\cos(\phi_k)} & \frac{da_k}{dk} &= \frac{y_0\tan(\phi_k)}{\cos(\phi_k)}\frac{d\phi_k}{dk}=a_k\tan(\phi_k)\frac{d\phi_k}{dk}\,,\\
+  \omega_k&=\sqrt{k} & \frac{d\omega_k}{dk}&=\frac{1}{2\sqrt{k}}\,,\\
+  r_k&=\frac{c}{2\omega_k} & \frac{dr_k}{dk}&=-\frac{c}{2\omega_k^2}\frac{d\omega_k}{dk}=-\frac{c}{2 k}\frac{1}{2\sqrt{k}}=-\frac{r_k}{2k}\,,\\
+  r_k\omega_k&=\frac{c}{2} & \frac{d(r_k\omega_k )}{dk}&=0\,,\\
+  \Gamma_k&=\sqrt{1-r_k^2} & \frac{d\Gamma_k}{dk}&=\frac{2 r_k}{2\sqrt{1-r_k^2}}\frac{dr_k}{dk}=-\frac{r_k}{k}\frac{r_k}{2\Gamma_k}\,,\\
+  \Gamma_k\omega_k&=\sqrt{k-\frac{c^2}{4}} & \frac{d(\Gamma_k\omega_k)}{dk}&=\frac{1}{2\sqrt{k-\frac{c^2}{4}}}=\frac{1}{2\Gamma_k\omega_k}\,,
+\end{align}
+First we take the derivative of $\phi$ from~\eqref{eq:tanphi}:
+\begin{align}
+  -\frac{d}{dk}\left(\frac{2v_0 + y_0c}{2y_0\Gamma_k\omega_k}\right) &= \frac{2}{cos(2\phi+1)} \frac{d\phi}{dk}\,,\\
+  -\left(-\frac{2v_0 + y_0c}{4y_0(\Gamma_k\omega_k)^3}\right) &= \frac{2}{cos(2\phi+1)} \frac{d\phi_k}{dk}\,,
+\end{align}
+We solve for the derivative of $\phi$:
+\begin{equation}
+  \frac{d\phi_k}{dk}=\cos(2\phi_k+1)\frac{2v_0 + y_0c}{8y_0(\Gamma_k\omega_k)^3}\,,
+\end{equation}
+Using these results, we assemble the full sensitivity:
+\begin{equation}
+  \label{eq:dydk}
+  \begin{split}
+    \frac{dy(t;k)}{dk}&=\frac{d}{dk}\left(a_k\exp\left(-\frac{c}{2}t\right)\cos(\Gamma_k\omega_k t+\phi_k)\right)\,,\\
+    &=\exp\left(-\frac{c}{2}t\right)\frac{d}{dk}\left(a_k\cos(\Gamma_k\omega_k t+\phi_k)\right)\,,\\
+    &=\exp\left(-\frac{c}{2}t\right)\left(\frac{da_k}{dk}\cos(\Gamma_k\omega_k t+\phi_k) - a_k \sin(\Gamma_k\omega_k t+\phi_k)\left(\frac{t}{2\Gamma_k\omega_k}+\frac{d\phi_k}{dk}\right)\right)\,,\\
+    &=\exp\left(-\frac{c}{2}t\right)\left(a_k\tan(\phi_k)\frac{d\phi_k}{dk}\cos(\Gamma_k\omega_k t+\phi_k) - a_k \sin(\Gamma_k\omega_k t+\phi_k)\left(\frac{t}{2\Gamma_k\omega_k}+\frac{d\phi_k}{dk}\right)\right)\,,\\
+    &=y(t;k)\left(\tan(\phi_k)\frac{d\phi_k}{dk} - \tan(\Gamma_k\omega_k t+\phi_k)\left(\frac{t}{2\Gamma_k\omega_k}+\frac{d\phi_k}{dk}\right)\right)\,,
+  \end{split}
+\end{equation}
+The last line is suitable for direct evaluation, given the parameters $(k,c)$. In \texttt{R} we calculate this using the function defined in Listing~\ref{lst:sens}.  
+\begin{lstlisting}[caption={Calculation of the sensitivity in \texttt{R}. The variables have slightly different names: \texttt{srr1(k)} is $\Gamma_k$ and \texttt{srr1w(k)} is $\Gamma_k\omega_k$. The independent variable $t$ is \texttt{x} in the code.},label={lst:sens},float]
+  w <- function(k) sqrt(k)
+  r <- function(k) c/(2*w(k))                          # damping ratio
+  srr1 <- function(k) sqrt(1-r(k)^2)                   # convenience
+  ## srr1*w
+  srr1w <- function(k) sqrt(k-0.25*c^2)
+  ## phase and amplitude
+  f <- function(k) atan(-(2*v0+y0*c)/(2*y0*srr1w(k))) 
+  a <- function(k) y0/cos(f(k))
+  ## derivatives
+  dwdk <- function(k) 1/(2*w(k))
+  dfdk <- function(k) cos(2*f(k) + 1)*(2*v0 + y0*c)/(8*y0*srr1w(k)^3)
+  dadk <- function(k) y0 * (tan(f(k))/cos(f(k))) * dfdk(k)
+  ## y and S = dy/dk
+  y <- function(x,k) a(k)*exp(-0.5*c*x)*cos(srr1w(k)*x + f(k))
+  S <- function(x,k) {
+    y(x,k)*(  tan(f(k))*dfdk(k)
+            - tan(srr1w(k)*x+f(k))*(0.5*x/srr1w(k) + dfdk(k)))
+  }
+\end{lstlisting}
+
+
+\section{Proof for the Solution}
+\label{sec:proof}
+
+We insert the proposed solution~\eqref{eq:sol} into~\eqref{eq:ivp}. First we perform al needed derivatives:
+\begin{equation}
+  \begin{split}
+    y(t;k)&=a\exp(-r\omega t)\cos(\sqrt{1-r^2}\omega t+\phi)\,,\\
+    \dot y(t;k)&=-y(t;k)r\omega - a\exp(-r\omega t)\sin(\sqrt{1-r^2}\omega t+\phi) \sqrt{1-r^2}\omega\,,
+  \end{split}\label{eq:proof}
+\end{equation}
+The second derivative of $y$:
+\begin{multline}
+  \ddot y(t;k)=-\dot y(t;k) r\omega \\
+  - \left(a\exp(-r\omega t)(-r\omega)\sin(\sqrt{1-r^2}\omega t+\phi) \sqrt{1-r^2}\omega\right.\\
+  + \left.a\exp(-r\omega t)\cos(\sqrt{1-r^2}\omega t+\phi) \left(\sqrt{1-r^2}\omega\right)^2\right)\,,  
+\end{multline}
+which simplifies to:
+\begin{equation}
+  \label{eq:ddoty}
+  \begin{split}
+  \ddot y(t;k)&=-\dot y(t;k) r\omega - \left(\underbrace{-a\exp(-r\omega t)\sin(\sqrt{1-r^2}\omega t+\phi)\sqrt{1-r^2}\omega}_{\dot y + yr\omega}   r\omega
+    + y(t;k) \left(\sqrt{1-r^2}\omega\right)^2\right)\,, \\
+  &=-\dot y(t;k) r\omega - \left(\dot y(t;k)r\omega + y(t;k)(r\omega)^2 
+    + y(t;k) \left(\sqrt{1-r^2}\omega\right)^2\right)\,,\\
+  &=-2\dot y(t;k) r\omega - \left(y(t;k)(r\omega)^2 
+    + y(t;k) (1-r^2)\omega^2\right)\,,\\
+  &=-2\dot y(t;k) r\omega - \left(y(t;k)\omega^2\right)\,,\\
+  &=-2\dot y(t;k) \frac{c}{2} - y(t;k)k = - k y(t;k) - c\dot y(t;k)\,,
+\end{split}
+\end{equation}
+which reconstructs the original ODE in~\eqref{eq:ivp}.
+\end{document}

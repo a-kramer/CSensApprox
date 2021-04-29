@@ -37,17 +37,27 @@ verify <- function(h5g,D,Label){
     L <- gsub("[ ]","_",Label)
     
     if (abs(u['F'])<1e-2){
-        ##dev.new()
-
+        ## Show that the numerical solution is correct within tolerances
+        ## dev.new()
         pdf(sprintf("%s_gsl_vs_exact_solution.pdf",L))
         y.error <- .solution.error(x,sv,sol,k,cS,Label,u)
         dev.off()
-        
-        ##dev.new()
+        ## Show that the sensitivity can be used to approximate
+        ## trajectories with slightly changed parameters
+        ## dev.new()
         pdf(sprintf("%s_linearization_error.pdf",L))
         par(mfcol = c(2, 1))
-        .linear.sensitivity.error(x,sv,sv0,cS,k,dk=2e-2,u,Label)
-        .linear.sensitivity.error(x,sv,sv0,cS,k,dk=4e-2,u,Label)
+        .linear.sensitivity.error(x,sv,sv0,cS,k,dk=5e-2,u,Label)
+        .linear.sensitivity.error(x,sv,sv0,cS,k,dk=1e-1,u,Label)
+        dev.off()
+        ## We can actually show the sensitivity here:
+        pdf(sprintf("%s_sensitivity_gsl_vs_exact_solution.pdf",L))
+        y.max <- max(abs(cS[1,2,]))
+        plot(x,cS[1,2,],xlab='time',ylab='sensitivity',main='dy(t;p)/dp approximation',ylim=c(-1,1)*y.max)
+        lines(x,sol[['S']],lty=1)
+        lines(x,sol[['Sfd']],lty=2)
+        lines(x,sol[['Scif']],lty=3)
+        legend('topleft',c('approximation','exact','finite differences','Cauchy'),lty=c(NA,1,2,3),pch=c(1,NA,NA,NA))
         dev.off()
     } else {
         ##dev.new()
@@ -169,22 +179,29 @@ time-points.")
     y0 <- sv0[2]
     sol.k0 <- .exact.solution(x,sv0,k,u)
     sol.k <- .exact.solution(x,sv0,k+dk,u)
-    xf <- max(x)*1.2
+    xf <- max(x)*1.5
     y.err <- sum(abs(sol.k[['y']]-sv.est[2,]))/length(x)
     plot(x,sol.k[['y']],
          ylab='y',
          type='p',
          pch=1,
-         sub=sprintf("averaged missmatch: %g",y.err),
+         sub=sprintf("average missmatch: %g",y.err),
          main=sprintf("%s at dk=%g",Label,dk),
          xlim=c(0,xf))
     lines(x,sv.est[2,],lty=2)
     w0 <- sqrt(k)
     lines(x,sol.k0[['y']],lty=1)
+    lines(x,sol.k0[['y']]+sol.k0[['S']]*dk,lty=3)
     legend("bottomright",
-           c("exact y(t;k+dk,c,F=0)",sprintf("y(t;k,c,F=%g)+Sy(t;k,c,F)*dk",u[1],u[2]),"exact y(t;k,c,F=0)"),
+           c("exact y(t;k+dk,c,F=0)",sprintf("y(t;k,c=%g,F=%g)+Sy(t;k,c,F)*dk",u[1],u[2]),"exact y(t;k,c,F=0)"),
            lty=c(0,2,1),
            pch=c(1,NA,NA))
+    message("scores: average absolute error of y(t;k+dk) - (y(t;k)+S(t;k)*dk)")
+    score=c(finite.differences=sum(abs(sol.k[['y']] - (sol.k0[['y']] + sol.k0[['Sfd']]*dk)))/length(x),
+            approximation=sum(abs(sol.k[['y']] - (sv.est[2,])))/length(x),
+            exact=sum(abs(sol.k[['y']] - (sol.k0[['y']]+sol.k0[['S']]*dk)))/length(x),
+            Cauchy=sum(abs(sol.k[['y']] - (sol.k0[['y']]+sol.k0[['Scif']]*dk)))/length(x))
+    print(score)
 }
 
 .exact.solution <- function(x=c(0,1,2,3),sv0,k=1.0,u=c(0.0,0.0)){
@@ -224,22 +241,46 @@ time-points.")
     ## v(0) = - a*cos(f)*r*w - a*sin(f)*sqrt(1-r*r)*w
     ##      = - y0*r*w - y0*tan(f)*sqrt(1-r*r)*w
     ## (v0 + y0*r*w)/(y0*sqrt(1-r*r)*w) = - tan(f)
+    ## d/dk ((v0 + y0*r*sqrt(k))/(y0*sqrt(1-r*r)*sqrt(k))) = - dtan(f)/df * df/dk
+    ## d/dk (v0/(y0*sqrt(1-r*r)*sqrt(k))) = -2/(cos(2*f+1)) * dfdk
+    ## (v0/(y0*sqrt(1-r*r))*(0.5*k^-1.5) = 2/(cos(2*f+1)) * dfdk
+    ## => df/dk = (v0*(cos(2*f+1))/(y0*sqrt(1-r*r)*4*sqrt(k)^3) 
     c <- u[1]
     F <- u[2]
-    ##
-    w <- sqrt(k)
-    r <- c/(2*w)                   # damping ratio
-    srr1 <- sqrt(1-r*r)            # convenience
-    ## dw/dk
-    dwdk <- 1/(2*w)
     y0 <- sv0['y']
     v0 <- sv0['v']
-    f <- atan(-(v0+y0*r*w)/(y0*srr1*w))  # phase
-    a <- y0/cos(f)                      # y0 if v0==0 && r==0
-
-    y <- a*exp(-r*w*x)*cos(srr1*w*x + f)
-    S <- -a*exp(-r*w*x)*(r*dwdk*x)*cos(srr1*w*x + f) - a*exp(-r*w*x)*sin(srr1*w*x + f)*(srr1*dwdk*x)
-    return(list(y=y,S=S))
+    ##
+    w <- function(k) sqrt(k)
+    r <- function(k) c/(2*w(k))        # damping ratio
+    srr1 <- function(k) sqrt(1-r(k)^2) # convenience
+    ## srr1*w
+    srr1w <- function(k) sqrt(k-0.25*c^2)
+    ## dw/dk
+    dwdk <- function(k) 1/(2*w(k))
+    f <- function(k) atan(-(2*v0+y0*c)/(2*y0*srr1w(k)))  # phase
+    dfdk <- function(k) cos(2*f(k) + 1)*(2*v0 + y0*c)/(8*y0*srr1w(k)^3)
+    a <- function(k) y0/cos(f(k))                       # y0 if v0==0 && r==0
+    dadk <- function(k) y0 * (tan(f(k))/cos(f(k))) * dfdk(k)
+    y <- function(x,k) a(k)*exp(-0.5*c*x)*cos(srr1w(k)*x + f(k))
+    #S <- function(x,k) exp(-0.5*c*x) * (dadk(k)*cos(srr1w(k)*x + f(k)) - a(k)*sin(srr1w(k)*x + f(k))*(x/(2*srr1w(k)) + dfdk(k)))
+    S <- function(x,k) y(x,k)*(tan(f(k))*dfdk(k) - tan(srr1w(k)*x+f(k))*(0.5*x/srr1w(k) + dfdk(k)))
+    h <- 1e-6
+    Sfd <- (-y(x,k+2*h)+8*y(x,k+h)-8*y(x,k-h)+y(x,k-2*h))/(12*h)
+    ## Cauchy's integral formula
+    R <- 1e-6
+    g <- function(s,k) k+R*(cos(s)+sin(s)*1i)
+    n <- length(x)
+    I <- vector(mode='numeric',length=n)
+    N <- 1e3
+    s.0.2pi <- seq(0,2*pi,length.out=N)
+    ds <- mean(diff(s.0.2pi))
+    for (i in 1:n){
+        xi <- x[i]
+        G <- function(s,k) y(xi,g(s,k))/(g(s,k)-k) * g(s,k)*1i
+        I[i] <- sum(G(s.0.2pi,k)[1:N-1])*ds
+    }
+    Cauchy  <- Re(I/(2*pi*1i))
+    return(list(y=y(x,k),S=S(x,k),Sfd=Sfd,Scif=Cauchy))
 }
 
 load_and_verify <- function(ModelName="HarmonicOscillator"){
