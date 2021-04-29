@@ -8,6 +8,7 @@
 #include <gsl/gsl_vector.h>
 #include <gsl/gsl_odeiv2.h>
 #include <gsl/gsl_blas.h>
+#include <gsl/gsl_linalg.h>
 #include <math.h>
 #include <dlfcn.h>
 #include "h5block.h"
@@ -256,6 +257,28 @@ void transition_matrix_v2(gsl_matrix *Ji, /* the jacobian at t=ti */
   gsl_matrix_free(W);
 }
 
+int* is_in_steady_state(solution_t *solution,double abs_tol, double rel_tol){
+  ndarray *y=solution->y;
+  ndarray *f=solution->f;
+  int rank=y->rank;
+  assert(rank==2);
+  int index[2]={0,0};
+  int i,j;
+  int nt=y->size[1];
+  int ny=y->size[0];
+  int *s=malloc(sizeof(int)*nt);
+  //ndarray_print(f,"f");
+  //ndarray_print(y,"y");
+  for (j=0;j<nt;j++){
+    s[j]=1;
+    index[1]=j;
+    for (i=0;j<ny;j++){
+      index[0]=i;
+      s[j] = s[j] && (fabs(ndarray_value(f,index)) < abs_tol + fabs(ndarray_value(y,index))*rel_tol);
+    }
+  }
+  return s;
+}
 
 /* Calculates the sensitivity matrix using the transition matrix
    PHI. The approximate sensitivity is stored in the `solution`
@@ -267,14 +290,25 @@ void sensitivity_approximation(solution_t *solution)/* solution struct from a nu
   int ny = solution->Jp->size[1];
   int nt = solution->t->size[0];
   int index[3]={0,0,0};
-  int j;
+  int i,j;
+  int status;
   double tf, ti;
   double *PHIf;
   double *PHIb;
   gsl_matrix_view Sf,Si,Ji,Jf,Bf,Bi;
   gsl_matrix_view PHI_fwd, PHI_bwd;
   gsl_matrix *S_temp=gsl_matrix_alloc(ny,np);
+  gsl_matrix *A=gsl_matrix_alloc(ny,ny);
+  gsl_matrix *eA=gsl_matrix_alloc(ny,ny);
+  gsl_matrix *LU=gsl_matrix_alloc(ny,ny);
+  gsl_permutation *prm=gsl_permutation_alloc(ny);
+  gsl_vector_view x,b,diag;
+  
+  int sign;
+  gsl_matrix *A_B=gsl_matrix_alloc(ny,np);
   assert(S_temp);
+
+  int *in_steady_state=is_in_steady_state(solution,1e-2,1e-2);
   
   for (j=1;j<nt;j++){
     index[2]=j; // current time index
@@ -292,10 +326,33 @@ void sensitivity_approximation(solution_t *solution)/* solution struct from a nu
     Bi=gsl_matrix_view_array(ndarray_ptr(solution->Jp,index),ny,np);
     ti=ndarray_value(solution->t,&(index[2]));
     
-    if (is_in_steady_state(solution->y)){
+    if (in_steady_state[j]){
+      //fprintf(stderr,"[%s] steady state detected at t=%g.\n",__func__,tf);
+      // prepare:
+      gsl_matrix_memcpy(A,&Ji.matrix);
+      diag=gsl_matrix_diagonal(A);
+      gsl_vector_add_constant(&diag.vector,1e-10);
+      gsl_matrix_memcpy(LU,A);
+      status=gsl_linalg_LU_decomp(LU, prm, &sign);
+      assert(status==GSL_SUCCESS);
       
+      gsl_matrix_scale(A,tf-ti);      
+      status=gsl_linalg_exponential_ss(A, eA, GSL_PREC_DOUBLE);
+      assert(status==GSL_SUCCESS);
+
+
+      for (i=0;i<np;i++){
+	b=gsl_matrix_column(&Bi.matrix,i);
+	x=gsl_matrix_column(A_B,i);
+	status=gsl_linalg_LU_solve(LU, prm, &b.vector, &x.vector);
+	assert(status==GSL_SUCCESS);
+      }
+      gsl_matrix_memcpy(S_temp,&Si.matrix);
+      gsl_matrix_add(S_temp,A_B);    // S_temp = (Si + A\B)
+      gsl_matrix_memcpy(&Sf.matrix,A_B);     // Sf <- A\B
+      gsl_blas_dgemm(CblasNoTrans,CblasNoTrans, 1.0, eA, S_temp, -1.0, &Sf.matrix);
+      // Sf <- exp(At)*(Si + A\B) - A\B
     } else {
-      
       transition_matrix_v2(&Ji.matrix,&Jf.matrix,ti,tf,PHIf);
       transition_matrix_v2(&Jf.matrix,&Ji.matrix,tf,ti,PHIb);
       
@@ -311,6 +368,11 @@ void sensitivity_approximation(solution_t *solution)/* solution struct from a nu
     }
   }
   gsl_matrix_free(S_temp);
+  gsl_matrix_free(eA);
+  gsl_matrix_free(A);
+  gsl_matrix_free(LU);
+  gsl_matrix_free(A_B);
+  gsl_permutation_free(prm);
 }
 
 
@@ -391,7 +453,7 @@ simulate(gsl_odeiv2_system sys, /* the system to integrate */
 	f = ndarray_ptr(solution[i]->f,&(index[1]));
 	Jy = ndarray_ptr(solution[i]->Jy,index);
 	Jp = ndarray_ptr(solution[i]->Jp,index);
-	sys.function(t, y->data, f, dfdt, par->data);
+	sys.function(t, y->data, f, par->data);
 	sys.jacobian(t, y->data, Jy, dfdt, par->data);
 	dfdp(t, y->data, Jp, par->data);
 	memcpy(y_ptr,y->data,sizeof(double)*(y->size));
@@ -446,7 +508,7 @@ simulate_evolve(gsl_odeiv2_system sys, /* the system to integrate */
   solution_t **solution=malloc(sizeof(solution_t*)*N);
   int index[3]={0,0,0};
   double t,tf;
-  double *Jy,*Jp,*y_ptr,f;
+  double *Jy,*Jp,*y_ptr,*f;
   double dfdt[d];
   size_t n,n_max=100;
   hid_t g_id;
@@ -486,8 +548,8 @@ simulate_evolve(gsl_odeiv2_system sys, /* the system to integrate */
       f = ndarray_ptr(solution[i]->f,&(index[1]));
       Jy = ndarray_ptr(solution[i]->Jy,index);
       Jp = ndarray_ptr(solution[i]->Jp,index);
-      sys.function(t, y->data, Jy, dfdt, par->data);
-      sys.jacobian(t, y->data, f, par->data);
+      sys.function(t, y->data, f, par->data);
+      sys.jacobian(t, y->data, Jy, dfdt, par->data);
       dfdp(t, y->data, Jp, par->data);
       
       memcpy(y_ptr,y->data,sizeof(double)*(y->size));
