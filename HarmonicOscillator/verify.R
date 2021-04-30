@@ -56,8 +56,8 @@ verify <- function(h5g,D,Label){
         plot(x,cS[1,2,],xlab='time',ylab='sensitivity',main='dy(t;p)/dp approximation',ylim=c(-1,1)*y.max)
         lines(x,sol[['S']],lty=1)
         lines(x,sol[['Sfd']],lty=2)
-        lines(x,sol[['Scif']],lty=3)
-        legend('topleft',c('approximation','exact','finite differences','Cauchy'),lty=c(NA,1,2,3),pch=c(1,NA,NA,NA))
+        points(x,sol[['Scif']],lty=3,pch=4)
+        legend('topleft',c('approximation','exact','finite differences','Cauchy'),lty=c(NA,1,2,NA),pch=c(1,NA,NA,4))
         dev.off()
     } else {
         ##dev.new()
@@ -267,16 +267,16 @@ time-points.")
     h <- 1e-6
     Sfd <- (-y(x,k+2*h)+8*y(x,k+h)-8*y(x,k-h)+y(x,k-2*h))/(12*h)
     ## Cauchy's integral formula
-    R <- 1e-6
-    g <- function(s,k) k+R*(cos(s)+sin(s)*1i)
+    R <- 3
+    g <- function(s,k) (k+R*(cos(s)+sin(s)*1i))
     n <- length(x)
     I <- vector(mode='numeric',length=n)
-    N <- 1e3
+    N <- 361
     s.0.2pi <- seq(0,2*pi,length.out=N)
     ds <- mean(diff(s.0.2pi))
     for (i in 1:n){
         xi <- x[i]
-        G <- function(s,k) y(xi,g(s,k))/(g(s,k)-k) * g(s,k)*1i
+        G <- function(s,k) y(xi,g(s,k))/(g(s,k)-k)^2 * ((g(s,k)-k)*1i)
         I[i] <- sum(G(s.0.2pi,k)[1:N-1])*ds
     }
     Cauchy  <- Re(I/(2*pi*1i))
