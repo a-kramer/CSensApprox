@@ -25,8 +25,10 @@
   stepnumber=3,                    % the step between two line-numbers. If it's 1, each line will be numbered
   stringstyle=\color{Bittersweet},     % string literal style
 }
+\usepackage{tikz}
 
 \newcommand{\diag}{\text{diag}}
+\newcommand{\Sapprox}{\texttt{S}}
 
 \frenchspacing
 \setcapindent{0em}
@@ -218,4 +220,176 @@ which simplifies to:
 \end{split}
 \end{equation}
 which reconstructs the original ODE in~\eqref{eq:ivp}.
+
+\section{Numerical Simulation Outcomes}
+\label{sec:results}
+
+In the following sections, we show comparisons of numerical solutions
+to the initial value problem~\eqref{eq:ivp} under various conditions:
+with or without damping (friction), with and without a constant
+driving force. In all cases, we do the numerical integration without
+forward sensitivity analysis, but use the analytical solution
+in~\eqref{eq:dydk}.
+
+By choice, the sensitivity is a scalar function, so we show its values
+directly. We have also included sensitivity calculations using finite
+differences and using the Cauchy integral formula on the analytical
+solution~\eqref{eq:sol}. The analytical solution for the state
+variable $y$ is well known and simple enough to be implemented
+correctly. So, we use these discrete methods to check the
+analytical solution for the sensitivity.
+
+In general, analytical solutions are not guaranteed to be
+available. An alternative is to use the sensitivity to predict a
+trajectory at slightly changed parameters $k+\Delta_k$, using a linear
+predictor:
+\begin{equation}
+  \label{eq:linear}
+ y(t;k+\Delta_k) = 
+ y(t;k)+S_y(t;k)\cdot\Delta_k + \mathcal{O}(\Delta_k^2)\,,
+\end{equation}
+For small enough $\Delta_k$, we neglect the second order effects.
+But, since we are using an approximation $\Sapprox$ of the
+sensitivity, we make an order one error for each time point $j$:
+\begin{equation}
+  \label{eq:SapproxError}
+  y(t_j;k+\Delta_k)\approx
+  y(t_j;k)+(\Sapprox_y(t_j;k) + \Delta_S(t_j;k))\cdot\Delta_k \,,
+\end{equation}
+where $\Delta_S(t_j;k)$ is the error we made when approximating the sensitivity:
+\begin{equation}
+  \label{eq:SapproxError}
+\Rightarrow \|\Delta_{S}(t_j;k)\cdot\Delta_k\|\approx \left\|y(t_j;k+\Delta_k)
+  - (y(t_j;k)+\Sapprox_y(t_j;k)\cdot\Delta_k) \right\|\,.
+\end{equation}
+This trajectory can of course be simulated directly using the changed
+parameters whenever analytical solutions are unavailable. This makes
+the above error estimate generally applicable.
+
+The average sensitivity error can be estimated using the discrepancy between
+the prediction and direct simulation/solution:
+\begin{equation}
+  \label{eq:linerr}
+  \delta_S:=\frac{1}{T}\sum_{j=1}^T \frac{\left\| y(t_j;k+\Delta_k) - (y(t_j;k) + S_y(t_j;k)\cdot\Delta_k)\right\|}{\|\Delta_k\|}\,,
+\end{equation}
+where $T$ is the number of discrete time points returned by the numerical solver. 
+
+\subsection{Oscillations}
+\label{sec:nodamping}
+
+Under the conditions $c=0$, the system sustains oscilations of constant height
+(given non-zero initial values). We integrate the model using the
+\texttt{BDF} solver in the \textsc{gsl} library \texttt{gsl\_odeiv2}.
+
+The first step is to verify that the numerical solution is
+sufficiently accurate. Both the analytical and numerical trajectories
+are shown in Figure~\ref{fig:dampedGSLvsASolTraj}. They agree within
+the requested accuracy.
+
+\begin{figure}\sffamily\firalining
+  \centering
+  \input{_no_damping_no_driving_force_gsl_vs_exact_solution}
+  \caption{Comparison between \emph{numerical integration} and the
+    \emph{analytical trajectory} solution. A perfect match within
+    visual precision.\label{fig:dampedGSLvsASolTraj}}
+\end{figure}
+
+Figure~\ref{fig:dampedlinerr} shows the difference between a
+prediction using the estimated sensitivity, and analytical solution
+for a small shift in $k$, as motivated in the previous Section. But,
+rather than a second simulation we use the analytical solution for
+$y$.
+
+\begin{figure}\sffamily\firalining
+  \centering
+  \input{_no_damping_no_driving_force_linearization_error}
+  \caption{Linearization Error. The trajectory is shifted linearly to
+    slightly changed parameters using the approximate sensitivity,
+    plotted against a direct solution at
+    $k+\Delta_k$.  \label{fig:dampedlinerr}}
+\end{figure}
+
+But, because the analytical solution for the sensitivity \emph{is}
+available, we can also show it directly, see
+Figure~\ref{fig:dampedGSLvsASolSensitivity}. This is usually not
+possible. Additionally, in many cases, obtaining a sensitivity check
+through finite differences requires quite a bit of work for larger
+systems, maybe more than conventional forward sensitivity
+analysis. That is why the linearization error is fairly useful.
+
+\begin{figure}\sffamily\firalining
+  \centering
+  \input{_no_damping_no_driving_force_sensitivity_gsl_vs_exact_solution}
+  \caption{Comparison between the (scalar) approximate sensitivity and the
+    analytical sensitivity solution
+    $dy(t;k)/dk$ \label{fig:dampedGSLvsASolSensitivity} }
+\end{figure}
+
+\subsection{Damping}
+\label{sec:damping}
+
+In the case of a damped oscillation, we continue to use the analytical
+solution and calculate the same error measures as in the previous
+section. Figure~\ref{fig:dampedGSLvsASol} shows the solution accuracy
+(disregarding sensitivities).
+\begin{figure}\sffamily\firalining
+  \centering
+  \input{_with_damping_but_no_driving_force_gsl_vs_exact_solution}
+  \caption{Comparison of the solution obatined using the solvers in
+    the \textsc{gsl} to the analytical
+    solution.  \label{fig:dampedGSLvsASol}}
+\end{figure}
+Figure~\ref{fig:dampedlinerr} shows the linearization error, as
+described in Section~\ref{sec:results}.
+\begin{figure}\sffamily\firalining
+  \centering
+  \input{_with_damping_but_no_driving_force_linearization_error}
+  \caption{Linearization Error as described in
+    Section~\ref{sec:results}. The error is very small.  \label{fig:dampedlinerr}}
+\end{figure}
+Since we have the analytical solution for the sensitivity, we can
+depict it directly, the graphs are shown in
+Figure~\ref{fig:dampedGSLvsASolSensitivity}.
+\begin{figure}\sffamily\firalining
+  \centering
+  \input{_with_damping_but_no_driving_force_sensitivity_gsl_vs_exact_solution}
+  \caption{Comparison between the numerically obtained sensitivity
+    approximation and the analytical sensitivity solution, for the
+    case of a damped harmonic
+    oscillator.  \label{fig:dampedGSLvsASolSensitivity}}
+\end{figure}
+
+\subsection{Driving Force}
+\label{sec:driven}
+
+We can also add a constant force to the model:
+\begin{equation}
+  \label{eq:F}
+  \ddot y = -ky - c\dot y + F
+\end{equation}
+
+Without following through all analytical calculations, we can restrict
+ourselves to numerical methods only. This is what we would do for
+large models. Since we are not using the analytical sensitivity
+solution, we calculate and depict the linearization
+error~\eqref{eq:linerr} only. To obtain a direct solution for the shifted trajectory, we use the solver from the \texttt{deSolve} package (in \textsc{r}).
+
+Figure~\ref{fig:SmallForceRdeSolve} shows the effects of a small force, while Figure~\ref{fig:WithForceRdeSolve} depicts the effects of a larger force.
+
+\begin{figure}\sffamily\firalining
+  \centering
+  \input{_with_damping_and_small_driving_force_compared_to_deSolve}
+  \caption{Linearization error compared to a direct solution with
+    \textsc{r}'s \texttt{deSolve}. The error is very small.\label{fig:SmallForceRdeSolve} }
+\end{figure}
+
+
+\begin{figure}\sffamily\firalining
+  \centering
+  \input{_with_damping_and_driving_force_compared_to_deSolve}
+  \caption{The linearization error for a bigger constant force, but
+    otherwise calculated precisely as in
+    Figure~\ref{fig:SmallForceRdeSolve}. The error is still small but clearly visible.  \label{fig:WithForceRdeSolve} }
+\end{figure}
+
 \end{document}

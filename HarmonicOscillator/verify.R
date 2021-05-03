@@ -3,7 +3,7 @@
 ## NOTE: c() is the concatenation function in R
 ## NOTE: t() is the transpose function in R
 ## dots in names have no special meaning in R: in x.a, x is not a structure
-
+library(tikzDevice)
 library(hdf5r)
 source("HarmonicOscillator.R")
 
@@ -39,29 +39,35 @@ verify <- function(h5g,D,Label){
     if (abs(u['F'])<1e-2){
         ## Show that the numerical solution is correct within tolerances
         ## dev.new()
-        pdf(sprintf("%s_gsl_vs_exact_solution.pdf",L))
+        tikz(sprintf("%s_gsl_vs_exact_solution.tex",L),width=6.4,height=4.8)
         y.error <- .solution.error(x,sv,sol,k,cS,Label,u)
         dev.off()
         ## Show that the sensitivity can be used to approximate
         ## trajectories with slightly changed parameters
         ## dev.new()
-        pdf(sprintf("%s_linearization_error.pdf",L))
-        par(mfcol = c(2, 1))
+        tikz(sprintf("%s_linearization_error.tex",L),width=6.4,height=4.8)
+        ##par(mfcol = c(2, 1))
         .linear.sensitivity.error(x,sv,sv0,cS,k,dk=5e-2,u,Label)
-        .linear.sensitivity.error(x,sv,sv0,cS,k,dk=1e-1,u,Label)
+        ##.linear.sensitivity.error(x,sv,sv0,cS,k,dk=1e-1,u,Label)
         dev.off()
         ## We can actually show the sensitivity here:
-        pdf(sprintf("%s_sensitivity_gsl_vs_exact_solution.pdf",L))
+        tikz(sprintf("%s_sensitivity_gsl_vs_exact_solution.tex",L),width=6.4,height=4.8)
         y.max <- max(abs(cS[1,2,]))
-        plot(x,cS[1,2,],xlab='time',ylab='sensitivity',main='dy(t;p)/dp approximation',ylim=c(-1,1)*y.max)
+        plot(x,cS[1,2,],xlab='time',ylab='sensitivity',main='sensitivity approximation',ylim=c(-1,1)*y.max)
         lines(x,sol[['S']],lty=1)
         lines(x,sol[['Sfd']],lty=2)
         points(x,sol[['Scif']],lty=3,pch=4)
-        legend('topleft',c('approximation','exact','finite differences','Cauchy'),lty=c(NA,1,2,NA),pch=c(1,NA,NA,4))
+        legend('topleft',
+               c('approximation','exact','finite differences','Cauchy int. formula'),
+               text.width=6,
+               lty=c(NA,1,2,NA),
+               pch=c(1,NA,NA,4),
+               bg='white',
+               bty='o')
         dev.off()
     } else {
         ##dev.new()
-        pdf(sprintf("%s_compared_to_deSolve.pdf",L))
+        tikz(sprintf("%s_compared_to_deSolve.tex",L),width=6.4,height=8)
         .compare.with.deSolve(x,sv,sv0,cS,k,dk=4e-2,u,Label)
         dev.off()
     }
@@ -90,20 +96,20 @@ verify <- function(h5g,D,Label){
     ## k=w*w
     ##
     ## dy/dk = -y0*sin(w*t)*t/(2*sqrt(k))
-    par(mfcol = c(2, 1))
-    F=u[2]
-    xf=max(x)*1.2
-    plot(x,sv[1,],
-         type="l",
-         xlab="t",
-         ylab="y, v",
-         sub="[C] gsl odeiv solution",
-         main=Label,
-         lty="dashed",
-         xlim=c(0,xf),
-         ylim=c(-1,1))
-    lines(x,sv[2,])
-    legend("topright",c("v","y"),lwd=c(1,1),lty=c("dashed","solid"))
+    ##par(mfcol = c(2, 1))
+    ## F=u[2]
+    ## xf=max(x)*1.2
+    ## plot(x,sv[1,],
+    ##      type="l",
+    ##      xlab="t",
+    ##      ylab="y, v",
+    ##      sub="[C] gsl odeiv solution",
+    ##      main=Label,
+    ##      lty="dashed",
+    ##      xlim=c(0,xf),
+    ##      ylim=c(-1,1))
+    ## lines(x,sv[2,])
+    ## legend("topright",c("v","y"),lwd=c(1,1),lty=c("dashed","solid"))
 
     y.exact <- sol[['y']]
     S.exact <- sol[['S']]
@@ -113,21 +119,29 @@ verify <- function(h5g,D,Label){
     message(sprintf("Estimated sensitivity of the 4th to 8th time point:\n```R"))
     print(cS[1,2,4:8])
     message("```")
-
-    y.error <- sum(abs(y.exact - sv[2,]))/length(x)
-    S.error <- sum(abs(S.exact - cS[1,2,]))/length(x)
+    y.max <- max(y.exact)
+    y.error <- sum(abs(y.exact - sv[2,]))/(length(x))
+    S.error <- sum(abs(S.exact - cS[1,2,]))/(length(x))
     message("The error is calculated as the sum of absolute differences, normalized by the number of
 time-points.")
     message(sprintf("The trajectory error from `gsl odeiv2` is %g.",y.error))
     message(sprintf("The approximate sensitivity error is %g.",S.error))
     plot(x,y.exact,
-         lty="solid",
-         ylim=c(-1,1),
-         lwd=1,
-         sub=sprintf("analytical solution (missmatch: %g)",y.error),
+         type='l',
+         lty=1,
+         ylim=c(-1,1)*y.max*1.1,
+         xlab='$t$',
+         ylab='state variables $(v,y)$',
+         sub=sprintf("analytical solution (missmatch: %.2g)",y.error),
          main=Label)
-    lines(x,sv[2,])
-    legend("topright",c("exact for F=0",sprintf("gsl odeiv with F=%g",F)),lty=c(0,1),pch=c(1,NA))
+    points(x,sv[2,],pch=1)
+    lines(x,sv[1,],lty=3)
+    legend("topright",
+           c("$y$ exact",sprintf("gsl odeiv $y(t;k)$",F),'gsl $v(t;k)$'),
+           lty=c(1,NA,3),
+           pch=c(NA,1,NA),
+           bg='white',
+           bty='o')
     return(y.error)
 }
 
@@ -148,59 +162,69 @@ time-points.")
                   jactype = "fullusr", jacfunc = HarmonicOscillator_jac,
                   atol = 1e-4, rtol = 1e-4)
         y.R <- t(sol[,"y"])
-        Diff <- sum(abs(y.R - sv.est[2,]))/length(x)
+        Diff <- sum(abs(y.R - sv.est[2,]))/(dk*length(x))
         message(sprintf("### deSolve vs Sensitivity shifted Trajectory:\n Sum of absolute differences per time-point: %g",Diff))
  
         par(mfcol = c(2, 1))
         tm <- sol[, "time"]
         plot(tm, sol[, "v"],
              type = "l",
-             xlab = "t",
-             ylab = "v",
+             xlab = "$t$",
+             ylab = "$v$",
              main=Label,
-             sub=sprintf("deSolve solution v(t;k+dk) with dk=%g",dk))
+             sub=sprintf("deSolve solution with $\\Delta_k=%g$ at $F=%g$ and $c=%g$",dk,u[2],u[1]))
         lines(x,sv.est[1,],lty=2)
-        legend("topright",c("deSolve","v(t;k)+Sv(t;k)*dk"),lty=c(1,2))
+        legend("topright",
+               c("deSolve (R)","$v(t;k) + S_v(t;k)\\cdot\\Delta_k$"),
+               lty=c(1,2),
+               bg='white',
+               bty='o')
 
         plot(tm, sol[, "y"],
              type = "l",
-             xlab = "t",
-             ylab = "y",
+             xlab = "$t$",
+             ylab = "$y$",
              main=Label,
-             sub=sprintf("average missmatch: %g",Diff))
+             sub=sprintf("average missmatch: $%.2g \\Delta_k$",Diff))
         lines(x,sv.est[2,],lty=2)
-        legend("topright",c("deSolve","y(t;k)+Sy(t;k)*dk"),lty=c(1,2))
+        legend("topright",
+               c("deSolve (R)","$y(t;k)+S_y(t;k)\\cdot\\Delta_k$"),
+               lty=c(1,2),
+               bg='white',
+               bty='o')
     }
 }
 
-.linear.sensitivity.error <- function(x,sv,sv0,cS,k,dk,u,Label="linearization error with F=0"){
+.linear.sensitivity.error <- function(x,sv,sv0,cS,k,dk,u,Label="linearization error with $F=0$"){
     dsv <- cS[1,,]*dk
     sv.est <- sv+dsv
     y0 <- sv0[2]
     sol.k0 <- .exact.solution(x,sv0,k,u)
     sol.k <- .exact.solution(x,sv0,k+dk,u)
     xf <- max(x)*1.5
-    y.err <- sum(abs(sol.k[['y']]-sv.est[2,]))/length(x)
+    y.err <- sum(abs(sol.k[['y']]-sv.est[2,]))/(dk*length(x))
     plot(x,sol.k[['y']],
          ylab='y',
-         type='p',
-         pch=1,
-         sub=sprintf("average missmatch: %g",y.err),
-         main=sprintf("%s at dk=%g",Label,dk),
-         xlim=c(0,xf))
-    lines(x,sv.est[2,],lty=2)
+         type='l',
+         lty=1,
+         sub=sprintf("average missmatch: $%.2g \\Delta_k$",y.err),
+         main=sprintf("%s at $\\Delta_k = %g$",Label,dk),)
+##         xlim=c(0,xf))
+    points(x,sv.est[2,],pch=1)
     w0 <- sqrt(k)
-    lines(x,sol.k0[['y']],lty=1)
-    lines(x,sol.k0[['y']]+sol.k0[['S']]*dk,lty=3)
-    legend("bottomright",
-           c("exact y(t;k+dk,c,F=0)",sprintf("y(t;k,c=%g,F=%g)+Sy(t;k,c,F)*dk",u[1],u[2]),"exact y(t;k,c,F=0)"),
-           lty=c(0,2,1),
-           pch=c(1,NA,NA))
-    message("scores: average absolute error of y(t;k+dk) - (y(t;k)+S(t;k)*dk)")
-    score=c(finite.differences=sum(abs(sol.k[['y']] - (sol.k0[['y']] + sol.k0[['Sfd']]*dk)))/length(x),
-            approximation=sum(abs(sol.k[['y']] - (sv.est[2,])))/length(x),
-            exact=sum(abs(sol.k[['y']] - (sol.k0[['y']]+sol.k0[['S']]*dk)))/length(x),
-            Cauchy=sum(abs(sol.k[['y']] - (sol.k0[['y']]+sol.k0[['Scif']]*dk)))/length(x))
+    lines(x,sol.k0[['y']],lty=3)
+    ##lines(x,sol.k0[['y']]+sol.k0[['S']]*dk,lty=2)
+    legend("topright",
+           c("exact $y(t;k+\\Delta_k)$",sprintf("$y(t;k) + S_y(t;k) \\Delta_k$",u[1],u[2]),"exact $y(t;k)$"),
+           lty=c(1,NA,2,3),
+           pch=c(NA,1,NA,NA),
+           bg='white',
+           bty='o')
+    message("scores: average absolute error of $y(t;k+\\Delta_k) - (y(t;k)+S_y(t;k)*\\Delta_k)/\\Delta_k$")
+    score=c(finite.differences=sum(abs(sol.k[['y']] - (sol.k0[['y']] + sol.k0[['Sfd']]*dk)))/(dk*length(x)),
+            approximation=sum(abs(sol.k[['y']] - (sv.est[2,])))/(dk*length(x)),
+            exact=sum(abs(sol.k[['y']] - (sol.k0[['y']]+sol.k0[['S']]*dk)))/(dk*length(x)),
+            Cauchy=sum(abs(sol.k[['y']] - (sol.k0[['y']]+sol.k0[['Scif']]*dk)))/(dk*length(x)))
     print(score)
 }
 
@@ -262,7 +286,6 @@ time-points.")
     a <- function(k) y0/cos(f(k))                       # y0 if v0==0 && r==0
     dadk <- function(k) y0 * (tan(f(k))/cos(f(k))) * dfdk(k)
     y <- function(x,k) a(k)*exp(-0.5*c*x)*cos(srr1w(k)*x + f(k))
-    #S <- function(x,k) exp(-0.5*c*x) * (dadk(k)*cos(srr1w(k)*x + f(k)) - a(k)*sin(srr1w(k)*x + f(k))*(x/(2*srr1w(k)) + dfdk(k)))
     S <- function(x,k) y(x,k)*(tan(f(k))*dfdk(k) - tan(srr1w(k)*x+f(k))*(0.5*x/srr1w(k) + dfdk(k)))
     h <- 1e-6
     Sfd <- (-y(x,k+2*h)+8*y(x,k+h)-8*y(x,k-h)+y(x,k-2*h))/(12*h)
