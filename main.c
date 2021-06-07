@@ -174,15 +174,26 @@ sim_from_h5(hid_t g_id, /* group id, location id of all simulation DATASETS */
    If tspan is `[0,0,0]`, then it is corrected to 100 points between `0` and
    `1.3*max(t)` */
 void fix_tspan_if_necessary(gsl_vector *t, /* measurement time vector (from the data file) */
- double *tspan) /* 3-element tspan vector to fix */
+ ndarray *tspan) /* 3-element tspan vector to fix */
 {
   assert(tspan);
+  int i=0;
   double tf=gsl_vector_max(t)*1.3; // a reasonable stop time [default value]
-  if (tspan[2]==tspan[0]) tspan[2]=tf;
-  assert(tspan[2]>tspan[0]);
-  if (tspan[1]==0.0) tspan[1]=1e-2*(tspan[2]-tspan[0]);
-  fprintf(stderr,"[%s] simulating in t: [%g,%g] with an increment of %g\n",__func__,tspan[0],tspan[2],tspan[1]);
+  double *a,*b=NULL,*c;
 
+  a=ndarray_ptr(tspan,&i);
+  if (tspan->size[0]>3) {
+    i++;
+    b=ndarray_ptr(tspan,&i);
+  }
+  i++;
+  c=ndarray_ptr(tspan,&i);
+  
+  if (*a==*c) *c=tf;
+  assert(*c>*a);
+  if (b && *b==0.0) *b=1e-2 * (*c - *a);
+  fprintf(stderr,"[%s] simulating in t: [%g,%g]",__func__,*a,*c);
+  if (b) fprintf(stderr," with an increment of %g\n",*b);
 }
 
 
@@ -278,6 +289,62 @@ int* is_in_steady_state(solution_t *solution,double abs_tol, double rel_tol){
     }
   }
   return s;
+}
+
+
+void save_solution(gsl_odeiv2_system sys, jacp dfdp, solution_t *solution, gsl_vector *y, gsl_vector* par, int *index, double t){
+  double *Jy,*Jp,*y_ptr,*f;
+  int d=y->size;
+  double dfdt[d];
+  y_ptr = ndarray_ptr(solution->y,&(index[1]));
+  f = ndarray_ptr(solution->f,&(index[1]));
+  Jy = ndarray_ptr(solution->Jy,index);
+  Jp = ndarray_ptr(solution->Jp,index);
+  sys.function(t, y->data, f, par->data);
+  sys.jacobian(t, y->data, Jy, dfdt, par->data);
+  dfdp(t, y->data, Jp, par->data);
+  
+  memcpy(y_ptr,y->data,sizeof(double)*d);
+  *ndarray_ptr(solution->t,&(index[2]))=t;
+}
+
+void stop_if_unsuccessful(int status, char *name, double t, double tf){
+  switch (status){
+  case GSL_SUCCESS:
+    return;
+  case GSL_EMAXITER:
+    fprintf(stderr,"[%s] simulation %s, time %g: maximum number of steps reached.\n",__func__,name,t);
+    fprintf(stderr,"\t\tfinal time: %.10g (short of %.10g)",t,tf);
+    break;
+  case GSL_ENOPROG:
+    fprintf(stderr,"[%s] simulation %s, time %g: step size dropeed below set minimum.\n",__func__,name,t);
+    fprintf(stderr,"\t\tfinal time: %.10g (short of %.10g)",t,tf);
+    break;
+  case GSL_EBADFUNC:
+    fprintf(stderr,"[%s] simulation %s: bad function.\n",__func__,name);
+    fprintf(stderr,"\t\tfinal time: %.10g (short of %.10g)",t,tf);
+    break;
+  default:
+    fprintf(stderr,"[%s] unhandled error code: %#x\n",__func__,status);
+    abort();
+  }      
+  printf("\n\n");
+}
+
+void write_solution(hid_t h5f, char *name, solution_t* solution){
+  hid_t g_id;
+  if (h5f) {
+    g_id = H5Gcreate2(h5f, name, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+    ndarray_to_h5(solution->y,g_id,"state");
+    ndarray_to_h5(solution->f,g_id,"f");
+    ndarray_to_h5(solution->t,g_id,"time");
+    ndarray_to_h5(solution->Jy,g_id,"jac");
+    ndarray_to_h5(solution->Jp,g_id,"jacp");
+    ndarray_to_h5(solution->Sy,g_id,"sensitivity");
+    ndarray_to_h5(solution->PHIf,g_id,"transition_matrix_forward");
+    ndarray_to_h5(solution->PHIb,g_id,"transition_matrix_backward");
+    H5Gclose(g_id);
+  }
 }
 
 /* Calculates the sensitivity matrix using the transition matrix
@@ -385,7 +452,7 @@ simulate(gsl_odeiv2_system sys, /* the system to integrate */
  gsl_odeiv2_driver* driver, /* the driver that is used to integrate `sys` */
  simulation_t *sim, /*`N` simulation instructions (e.g.: initial value y0)*/
  hsize_t N, /* number of simulations to perform, length of `sim` */
- double *tspan, /* time span vector: initial time, increment, final time */
+ ndarray *tspan, /* time span vector: initial time, increment, final time */
  gsl_vector *u, /* input vector (a pointer that can be used to change `sys`)*/ 
  gsl_vector *par, /* parameters of the model, a pointer that can be used to change `sys`.*/
  jacp dfdp, /* a function that returns the parameter derivative of the model's right hand side function.*/
@@ -397,89 +464,47 @@ simulate(gsl_odeiv2_system sys, /* the system to integrate */
   size_t d=sim[0].y0->size;
   size_t p=par->size;
   gsl_vector *y=gsl_vector_alloc(d);
-  double *y_ptr;
   size_t i,j,k;
   solution_t **solution=malloc(sizeof(solution_t*)*N);
   int index[3]={0,0,0};
   double t,tf,dt;
-  double *Jy,*Jp,*f;
-  double dfdt[d];
   size_t n;
-  hid_t g_id;
   int status;
   for (i=0;i<N;i++){
     assert(sim[i].name && strlen(sim[i].name));
-    if (h5f) g_id = H5Gcreate2(h5f, sim[i].name, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
     gsl_odeiv2_driver_reset(driver);
     // fix possible issues with simulation time specification:
     fix_tspan_if_necessary(sim[i].t,tspan);    
     gsl_vector_memcpy(y,sim[i].y0);
     //gsl_vector_add_constant(y,1e-5);
     gsl_vector_memcpy(u,sim[i].u);
-     t=tspan[0];
-    dt=tspan[1];
+     t=tspan->value[0];
+    dt=tspan->value[1];
     // print table header:
     printf("# Simulation %li: \n",i);
     printf("#t\t");
     for (k=0;k<y->size;k++)
       printf("y%li\t",k);
     printf("\n");
-    n=(size_t) ((tspan[2]-tspan[0])/tspan[1]);
+    n=(size_t) ((tspan->value[2]-tspan->value[0])/tspan->value[1]);
     solution[i]=solution_alloc(d,p,n);
     for (j=0;j<n;j++){
       tf=t+dt;
       status=gsl_odeiv2_driver_apply(driver, &t, tf, y->data);
       //report any error codes to the user
-      switch (status){
-      case GSL_EMAXITER:
-	fprintf(stderr,"[%s] simulation %li, time_point %li: maximum number of steps reached.\n",__func__,i,j);
-	fprintf(stderr,"\t\tfinal time: %.10g (short of %.10g)",t,tf);
-	break;
-      case GSL_ENOPROG:
-	fprintf(stderr,"[%s] simulation %li, time_point %li: step size dropeed below set minimum.\n",__func__,i,j);
-	fprintf(stderr,"\t\tfinal time: %.10g (short of %.10g)",t,tf);
-	break;
-      case GSL_EBADFUNC:
-	fprintf(stderr,"[%s] simulation %li, time_point %li: bad function.\n",__func__,i,j);
-	fprintf(stderr,"\t\tfinal time: %.10g (short of %.10g)",t,tf);
-	break;
-      case GSL_SUCCESS:
-	printf("%g\t",t);
-	for (k=0;k<y->size;k++)
-	  printf("%g\t",gsl_vector_get(y,k));
-	printf("\n");
-	index[2]=j;
-	y_ptr = ndarray_ptr(solution[i]->y,&(index[1]));
-	f = ndarray_ptr(solution[i]->f,&(index[1]));
-	Jy = ndarray_ptr(solution[i]->Jy,index);
-	Jp = ndarray_ptr(solution[i]->Jp,index);
-	sys.function(t, y->data, f, par->data);
-	sys.jacobian(t, y->data, Jy, dfdt, par->data);
-	dfdp(t, y->data, Jp, par->data);
-	memcpy(y_ptr,y->data,sizeof(double)*(y->size));
-	*ndarray_ptr(solution[i]->t,&(index[2]))=t;
-	break;
-      default:
-	fprintf(stderr,"[%s] unhandled error code: %#x\n",__func__,status);
-	abort();
-      }
-      if (status!=GSL_SUCCESS) break;
+      stop_if_unsuccessful(status,sim[i].name,t,tf);
+      printf("%g\t",t);
+      for (k=0;k<y->size;k++)
+	printf("%g\t",gsl_vector_get(y,k));
+      printf("\n");
+      index[2]=j;
+      save_solution(sys, dfdp, solution[i], y, par, index, t);
     }
     sensitivity_approximation(solution[i]);
-    if (h5f){
-      ndarray_to_h5(solution[i]->y,g_id,"state");
-      ndarray_to_h5(solution[i]->f,g_id,"f");
-      ndarray_to_h5(solution[i]->t,g_id,"time");
-      ndarray_to_h5(solution[i]->Jy,g_id,"jac");
-      ndarray_to_h5(solution[i]->Jp,g_id,"jacp");
-      ndarray_to_h5(solution[i]->Sy,g_id,"sensitivity");
-      H5Gclose(g_id);
-    }    
-    printf("\n\n");
+    write_solution(h5f,sim[i].name,solution[i]);
   }
   return solution;
 }
-
 
 /* Intergrates the system `sys` using the specified `driver`, but
    using the solvers steps, ignoring tspan[1]. The simulation
@@ -491,7 +516,7 @@ simulate_evolve(gsl_odeiv2_system sys, /* the system to integrate */
  gsl_odeiv2_driver* driver, /* the driver that is used to integrate `sys` */
  simulation_t *sim, /*`N` simulation instructions (e.g.: initial value y0)*/
  hsize_t N, /* number of simulations to perform, length of `sim` */
- double *tspan, /* time span vector: initial time, increment, final time */
+ ndarray *tspan, /* time span vector: initial time, final time */
  gsl_vector *u, /* input vector (a pointer that can be used to change `sys`)*/ 
  gsl_vector *par, /* parameters of the model, a pointer that can be used to change `sys`.*/
  jacp dfdp, /* a function that returns the parameter derivative of the model's right hand side function.*/
@@ -508,95 +533,54 @@ simulate_evolve(gsl_odeiv2_system sys, /* the system to integrate */
   solution_t **solution=malloc(sizeof(solution_t*)*N);
   int index[3]={0,0,0};
   double t,tf;
-  double *Jy,*Jp,*y_ptr,*f;
-  double dfdt[d];
   size_t n,n_max=100;
-  hid_t g_id;
   int status;
   for (i=0;i<N;i++){// simulations
     assert(sim[i].name && strlen(sim[i].name));
-    if (h5f) g_id = H5Gcreate2(h5f, sim[i].name, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
     gsl_odeiv2_driver_reset(driver);
     // fix possible issues with simulation time specification:
-    fix_tspan_if_necessary(sim[i].t,tspan);    
+    fix_tspan_if_necessary(sim[i].t,tspan);
     gsl_vector_memcpy(y,sim[i].y0);
     //gsl_vector_add_constant(y,1e-5);
     gsl_vector_memcpy(u,sim[i].u);
-    t=tspan[0];
-    tf=tspan[2];
+    t=tspan->value[0];
+    tf=tspan->value[1];
     // print table header:
     printf("# Simulation %li: \n",i);
     printf("#t\t");
-    for (k=0;k<y->size;k++)
-      printf("y%li\t",k);
+    for (k=0;k<y->size;k++) printf("y%li\t",k);
     printf("\n");
     // estimate number of points:
     n=0;
     solution[i]=solution_alloc(d,p,n_max);
     while (t<tf){
       if (n==n_max){
-	n_max=n_max+100;
+	n_max+=100;
 	solution_resize(solution[i],n_max);
-      }
-      
+      }      
       printf("%g\t",t);
-      for (k=0;k<y->size;k++)
-	printf("%g\t",gsl_vector_get(y,k));
+      for (k=0;k<y->size;k++) printf("%g\t",gsl_vector_get(y,k));
       printf("\n");
       index[2]=n;
-      y_ptr = ndarray_ptr(solution[i]->y,&(index[1]));
-      f = ndarray_ptr(solution[i]->f,&(index[1]));
-      Jy = ndarray_ptr(solution[i]->Jy,index);
-      Jp = ndarray_ptr(solution[i]->Jp,index);
-      sys.function(t, y->data, f, par->data);
-      sys.jacobian(t, y->data, Jy, dfdt, par->data);
-      dfdp(t, y->data, Jp, par->data);
-      
-      memcpy(y_ptr,y->data,sizeof(double)*(y->size));
-      *ndarray_ptr(solution[i]->t,&(index[2]))=t;
-
-      status = gsl_odeiv2_evolve_apply(driver->e, driver->c, driver->s, &sys, &t, tf, &h, y->data);
-      //report any error codes to the user
-      switch (status){
-      case GSL_EMAXITER:
-	fprintf(stderr,"[%s] simulation %li, time_point %li: maximum number of steps reached.\n",__func__,i,n);
-	fprintf(stderr,"\t\tfinal time: %.10g (short of %.10g)",t,tf);
-	break;
-      case GSL_ENOPROG:
-	fprintf(stderr,"[%s] simulation %li, time_point %li: step size dropeed below set minimum.\n",__func__,i,n);
-	fprintf(stderr,"\t\tfinal time: %.10g (short of %.10g)",t,tf);
-	break;
-      case GSL_EBADFUNC:
-	fprintf(stderr,"[%s] simulation %li, time_point %li: bad function.\n",__func__,i,n);
-	fprintf(stderr,"\t\tfinal time: %.10g (short of %.10g)",t,tf);
-	break;
-      case GSL_SUCCESS:
-	n++;
-	break;
-      default:
-	fprintf(stderr,"[%s] unhandled error code: %#x\n",__func__,status);
-	abort();
-      }
-      if (status!=GSL_SUCCESS) break;
+      save_solution(sys, dfdp, solution[i], y, par, index, t);
+      status = gsl_odeiv2_evolve_apply
+	(driver->e, /* evolve object        */
+	 driver->c, /* control object       */
+	 driver->s, /* stepper object       */
+	 &sys,      /* system               */
+	 &t,        /* time to update       */
+	 tf,        /* direction            */
+	 &h,        /* step size suggestion */ 
+	 y->data);
+      stop_if_unsuccessful(status,sim[i].name,t,tf);
+      n++;
     }
     solution_resize(solution[i],n);
     sensitivity_approximation(solution[i]);
-    if (h5f){
-      ndarray_to_h5(solution[i]->y,g_id,"state");
-      ndarray_to_h5(solution[i]->f,g_id,"f");
-      ndarray_to_h5(solution[i]->t,g_id,"time");
-      ndarray_to_h5(solution[i]->Jy,g_id,"jac");
-      ndarray_to_h5(solution[i]->Jp,g_id,"jacp");
-      ndarray_to_h5(solution[i]->Sy,g_id,"sensitivity");
-      ndarray_to_h5(solution[i]->PHIf,g_id,"transition_matrix_forward");
-      ndarray_to_h5(solution[i]->PHIb,g_id,"transition_matrix_backward");
-      H5Gclose(g_id);
-    }    
-    printf("\n\n");
+    write_solution(h5f,sim[i].name,solution[i]);
   }
   return solution;
 }
-
 
 /*Finds the first file ending in `.so` in the current working
   directory. The suffix `.so` is stripped from the file name, the
@@ -627,24 +611,26 @@ first_so(){
   return name;
 }
 
-
 /* Interprets a string as a range specification from three values:
    "initial increment final", the values can be separated by spaces or
    colons `:`. */
-double* /* a three element array of `double`s */
+ndarray* /* a three element array of `double`s */
 read_tspan(char *val)/*a string of the form "a:b:c" or "a b c". */{
-  int j;
+  int n=0,j;
   char *s,*p;
-  double *t=calloc(3,sizeof(double));
+  int size=3;
+  double *t=ndarray_alloc(1,&size);
   if (val){
     s=val;
     p=val;
     for (j=0;j<3;j++){
       if (p[0]==':') p++;
       s=p;
-      t[j]=strtod(s,&p);
+      *ndarray_ptr(t,&j)=strtod(s,&p);
       if (s==p) break;
+      else n++;
     }
+    ndarray_resize(t,n);
   }
   return t;
 }
@@ -684,7 +670,6 @@ void test_evaluation(gsl_odeiv2_system sys, jacp dfdp, gsl_vector *y0, gsl_vecto
 
 }
 
-
 /* This prgram loads an ODE model, specified for the `gsl_odeiv2`
    library. The initial value problems are specified in an hdf5 file,
    intended for use in systems biology applications. So, some of the
@@ -705,7 +690,7 @@ main(int argc, char *argv[]){
   int i=0;
   char *model_name=NULL, *h5file=NULL;
   double abs_tol=1e-6,rel_tol=1e-5,h=1e-3;
-  double *t=NULL;
+  ndarray *t=NULL;
   ndarray_test();
   for (i=1;i<argc;i++){
     fprintf(stderr,"[%s] %s=%s\n",__func__,argv[i],argv[i+1]); fflush(stderr);
@@ -734,9 +719,7 @@ main(int argc, char *argv[]){
       exit(1);
     }
   }
-  if (!t) t=read_tspan("0 0 0");
-  fprintf(stderr,"[%s] t: %g:%g:%g\n",__func__,t[0],t[1],t[2]);
-  fflush(stderr);
+  if (!t) t=read_tspan("0 1");
   if (!model_name) model_name=first_so();
   assert(model_name);
   
@@ -791,7 +774,11 @@ main(int argc, char *argv[]){
   assert(h5f);
 
   // the most CPU work happens here:
-  solution_t **solution=simulate_evolve(sys,driver,sim,N,t,&(u.vector),par,dfdp,h5f);
+  if (t->size[0]==2){
+    solution_t **solution=simulate_evolve(sys,driver,sim,N,t,&(u.vector),par,dfdp,h5f);
+  } else if (t->size[0]==3){
+    solution_t **solution=simulate(sys,driver,sim,N,t,&(u.vector),par,dfdp,h5f);
+  }
   gsl_odeiv2_driver_free(driver);
   H5Fclose(h5f);
   return EXIT_SUCCESS;
