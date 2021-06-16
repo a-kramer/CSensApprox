@@ -11,7 +11,7 @@
    but instead of matrices, we just keep track of the index-structure of the projection:
    v[i]=y[p[i]], where p[i] is a list of indices.
     */
-int* not_in_steady_state(solution_t *solution, int* p, double abs_tol, double rel_tol){
+int* not_in_steady_state(solution_t *solution, int** pptr, double abs_tol, double rel_tol){
   ndarray *y=solution->y;
   ndarray *f=solution->f;
   int rank=y->rank;
@@ -21,15 +21,15 @@ int* not_in_steady_state(solution_t *solution, int* p, double abs_tol, double re
   int nt=y->size[1];
   int ny=y->size[0];
   int *s=malloc(sizeof(int)*nt);
-  p=malloc(sizof(int)*(nt*ny));
+  int *p=malloc(sizeof(int)*(nt*ny));
   //ndarray_print(f,"f");
   //ndarray_print(y,"y");
   for (j=0;j<nt;j++){
     s[j]=0;
     index[1]=j;
+    k=ny-1;
     for (i=0;i<ny;i++){
       index[0]=i;
-      k=ny-1;
       if (fabs(ndarray_value(f,index)) > abs_tol + fabs(ndarray_value(y,index))*rel_tol){
 	p[ny*j+s[j]]=i;
 	s[j]++;
@@ -39,6 +39,7 @@ int* not_in_steady_state(solution_t *solution, int* p, double abs_tol, double re
       }
     }
   }
+  *pptr=p;
   return s;
 }
 
@@ -50,17 +51,14 @@ state_projection
  const double t,
  const gsl_matrix *A,
  const gsl_matrix *B,
- const gsl_matrix *PHIf,
- const gsl_matrix *PHIb,
  const gsl_matrix *S)
 {
   assert(A);
   assert(B);
-  assert(PHI);
   assert(S);
   state_t *s=NULL;
   int np=B->size2;
-  int i,j,k;
+  int i,j;
   double d;
   if (n){
     s=malloc(sizeof(state_t));
@@ -68,7 +66,6 @@ state_projection
     s->dfdy=gsl_matrix_alloc(n,n);
     s->dfdp=gsl_matrix_alloc(n,np);
     s->dydp=gsl_matrix_alloc(n,np);
-    s->PHI=gsl_matrix_alloc(n,n);
     for (i=0;i<n;i++){
       for (j=0;j<n;j++){
 	d=gsl_matrix_get(A,p[i],p[j]);
@@ -78,17 +75,19 @@ state_projection
 	d=gsl_matrix_get(B,p[i],j);
 	gsl_matrix_set(s->dfdp,i,j,d);
       }
+      for (j=0;j<np;j++){
+	d=gsl_matrix_get(S,p[i],j);
+	gsl_matrix_set(s->dydp,i,j,d);
+      }
     }
   }
   return s;
 }
 
 void state_projection_free(state_t *s){
-    s->t=t;
     free(s->dfdy);
     free(s->dfdp);
     free(s->dydp);
-    free(s->PHI);
     free(s);
 }
 
@@ -100,15 +99,14 @@ transition_matrix(gsl_matrix *Ji, /* the jacobian at t=ti */
  gsl_matrix *Jf, /* the jacobian at t=tf */
  double ti, /* initial time of the interval (left bondary) */
  double tf, /* final time of the interval (right boundary) */
- double *phi) /* [OUT] PHI(tf,ti): the transition matrix between ti and tf*/
+ gsl_matrix *phi) /* [OUT] PHI(tf,ti): the transition matrix between ti and tf*/
 {
   double s=0.5*(tf-ti);
   size_t ny=Ji->size1;
   gsl_matrix *I_k=gsl_matrix_alloc(ny,ny);   // I_{ k }(tf,ti)
   gsl_matrix *I_k_plus_1=gsl_matrix_alloc(ny,ny);  // I_{k+1}(tf,ti)
-  gsl_matrix_view PHI=gsl_matrix_view_array(phi,ny,ny);
 
-  gsl_matrix_set_identity(&PHI.matrix); // I_0
+  gsl_matrix_set_identity(phi); // I_0
   int i,n=2;
   // I_1 is:
   gsl_matrix_memcpy(I_k,Jf);
@@ -116,7 +114,7 @@ transition_matrix(gsl_matrix *Ji, /* the jacobian at t=ti */
   gsl_matrix_scale(I_k,s);
   
   for (i=0;i<n;i++){
-    gsl_matrix_add(&PHI.matrix,I_k);
+    gsl_matrix_add(phi,I_k);
     // C = s*A*B + b*C   [dgemm] s is DeltaT*0.5 and b is 0
     gsl_blas_dgemm(CblasNoTrans,CblasNoTrans, s, Jf, I_k, 0.0, I_k_plus_1);
     gsl_matrix_memcpy(I_k,I_k_plus_1); 
@@ -132,7 +130,7 @@ void transition_matrix_v2(gsl_matrix *Ji, /* the jacobian at t=ti */
  gsl_matrix *Jf, /* the jacobian at t=tf */
  double ti, /* initial time of the interval (left bondary) */
  double tf,/* final time of the interval (right boundary) */
- double *phi) /* return buffer */
+ gsl_matrix *phi) /* return buffer */
 {
   double s=0.5*(tf-ti);
   size_t ny=Ji->size1;
@@ -141,8 +139,7 @@ void transition_matrix_v2(gsl_matrix *Ji, /* the jacobian at t=ti */
   gsl_matrix *W=gsl_matrix_alloc(ny,ny);
   gsl_matrix *I0=gsl_matrix_alloc(ny,ny);  // I0(tf;ti) = identity;
   gsl_matrix *I1=gsl_matrix_alloc(ny,ny);  // I1(tf;ti) = 0.5*(tf-ti)*(Jf+Ji)
-  gsl_matrix_view PHI=gsl_matrix_view_array(phi,ny,ny);
-  gsl_matrix_set_identity(&PHI.matrix);
+  gsl_matrix_set_identity(phi);
   gsl_matrix_set_identity(I0);
   // I1
   gsl_matrix_memcpy(I1,Jf);
@@ -155,7 +152,7 @@ void transition_matrix_v2(gsl_matrix *Ji, /* the jacobian at t=ti */
     gsl_blas_dgemm(CblasNoTrans,CblasNoTrans, s, W, Jf, 1.0, V);
     gsl_matrix_memcpy(W,V);
   }
-  gsl_blas_dgemm(CblasNoTrans,CblasNoTrans, 1.0, W, I1, 1.0, &PHI.matrix);
+  gsl_blas_dgemm(CblasNoTrans,CblasNoTrans, 1.0, W, I1, 1.0, phi);
 
   gsl_matrix_free(I0);
   gsl_matrix_free(I1);
@@ -189,13 +186,16 @@ near_steady_state_approximation
  gsl_matrix *Si,
  gsl_matrix *Ji,
  gsl_matrix *Bi,
+ double tf,
+ double ti,
  expm_work_t *w)
 {
-  int ny=Bi->size1;
+  int i;
+  //int ny=Bi->size1;
   int np=Bi->size2;
   gsl_vector_view x,b,diag;
   int status;
-  gsl_matrix *S_temp=w->S;
+
   gsl_matrix_memcpy(w->A,Ji);
   diag=gsl_matrix_diagonal(w->A);
   gsl_vector_add_constant(&diag.vector,1e-10);
@@ -214,36 +214,56 @@ near_steady_state_approximation
   }
   gsl_matrix_memcpy(w->S,Si);
   gsl_matrix_add(w->S,w->A_B);    // S_temp = (Si + A\B)
-  gsl_matrix_memcpy(Sf,A_B);     // Sf <- A\B
-  gsl_blas_dgemm(CblasNoTrans,CblasNoTrans, 1.0, w->eA, S_temp, -1.0, Sf); // Sf <- exp(At)*(Si + A\B) - A\B
+  gsl_matrix_memcpy(Sf,w->A_B);     // Sf <- A\B
+  gsl_blas_dgemm(CblasNoTrans,CblasNoTrans, 1.0, w->eA, w->S, -1.0, Sf); // Sf <- exp(At)*(Si + A\B) - A\B
 }
 
 /* Peano Baker Series sensitivity approximation */
-void PBS(state_t *initial, state_t *final, double *work){
+void PBS
+(state_t *initial,
+ state_t *final,
+ gsl_matrix *PHIf,
+ gsl_matrix *PHIb,
+ double *work)
+{
   assert(initial);
   assert(final);
   int ny=initial->dfdp->size1;
   int np=initial->dfdp->size2;
-  gsl_matrix_view temp=gsl_matrix_view_array(work,ny,np)
+  gsl_matrix_view temp=gsl_matrix_view_array(work,ny,np);
   double dt=final->t - initial->t;
   transition_matrix_v2
     (initial->dfdy,final->dfdy,
      initial->t,final->t,
-     final->PHIf);
+     PHIf);
   transition_matrix_v2
     (final->dfdy,initial->dfdy,
      final->t,initial->t,
-     final->PHIb);
-  
-  // Sf = PHI(k+1,k) * (0.5*dt*(PHI(k,k+1)*B(k+1) + B(k)) + Si )
+     PHIb);
+  // B = dfdp
+  // S = dydp
+  // Sf = 1.0*PHI(k+1,k) * (0.5*dt*(1.0*PHI(k,k+1)*B(k+1) + 0.0*B(k+1) + B(k)) + Si ) + 0.0*Sf
   gsl_blas_dgemm
     (CblasNoTrans,CblasNoTrans, 1.0,
-     initial->PHI, final->dfdp,
+     PHIb, final->dfdp,
      0.0,&temp.matrix);
   gsl_matrix_add(&temp.matrix,initial->dfdp);
   gsl_matrix_scale(&temp.matrix,0.5*dt);
   gsl_matrix_add(&temp.matrix,initial->dydp);
-  gsl_blas_dgemm(CblasNoTrans,CblasNoTrans, 1.0, final->PHI, S_temp, 0.0, final->dydp);
+  gsl_blas_dgemm
+    (CblasNoTrans,CblasNoTrans, 1.0,
+     PHIf, &temp.matrix,
+     0.0, final->dydp);
+}
+
+void update_sensitivity_from_state(gsl_matrix *Sf,state_t *final, int *p, int n){
+  int i;
+  gsl_vector_view Sf_row, projection_row;
+  for (i=0;i<n;i++){
+    Sf_row=gsl_matrix_row(Sf,p[i]);
+    projection_row=gsl_matrix_row(final->dydp,i);
+    gsl_vector_memcpy(&(Sf_row.vector),&(projection_row.vector));
+  }
 }
 
 /* Calculates the sensitivity matrix using the transition matrix
@@ -256,54 +276,70 @@ void sensitivity_approximation(solution_t *solution)/* solution struct from a nu
   int ny = solution->Jp->size[1];
   int nt = solution->t->size[0];
   int index[3]={0,0,0};
-  int i,j;
+  int j;
 
   double tf, ti;
-  double *PHIf;
-  double *PHIb;
+  gsl_matrix_view PHIf;
+  gsl_matrix_view PHIb;
   gsl_matrix_view Sf,Si,Ji,Jf,Bf,Bi;
-  gsl_matrix_view PHI_fwd, PHI_bwd;
-  gsl_matrix *S_temp=gsl_matrix_alloc(ny,np);
-  
-  assert(S_temp);
+
   int *p;
-  int *n=not_in_steady_state(solution,p,1e-2,1e-2);
+  int *n=not_in_steady_state(solution,&p,1e-8,1e-6);
   state_t *initial, *final;
   double *work=malloc(sizeof(double)*ny*np);
   expm_work_t *w=work_mem_alloc(ny,np);
-
+  fprintf(stderr,"[%s] approximating the sensitivity at %i time points\n",__func__,nt);
   for (j=1;j<nt;j++){
+    fprintf(stderr,"[%s] %i state variables are not in steady state.\n",__func__,n[j]);
     // create appropriate vector views:
     index[2]=j; // the current time index
-    gsl_matrix_set_zero(S_temp);
+
     Sf=gsl_matrix_view_array(ndarray_ptr(solution->Sy,index),ny,np);
     Jf=gsl_matrix_view_array(ndarray_ptr(solution->Jy,index),ny,ny);
     Bf=gsl_matrix_view_array(ndarray_ptr(solution->Jp,index),ny,np);
     tf=ndarray_value(solution->t,&(index[2]));
-    PHIf=gsl_matrix_view_array(ndarray_ptr(solution->PHIf,index),ny,ny);
-    PHIb=gsl_matrix_view_array(ndarray_ptr(solution->PHIb,index),ny,ny);
-    final=state_projection(n[j],&p[ny*j],tf,Jf,Bf,PHIf,PHIb,Sf);
-    
+    if (n[j]){
+      PHIf=gsl_matrix_view_array(ndarray_ptr(solution->PHIf,index),n[j],n[j]);
+      PHIb=gsl_matrix_view_array(ndarray_ptr(solution->PHIb,index),n[j],n[j]);
+      
+      final=state_projection
+	(n[j],&p[ny*j],
+	 tf,
+	 &Jf.matrix,
+	 &Bf.matrix,
+	 &Sf.matrix);
+    }
     index[2]=j-1; // previous time index
     Si=gsl_matrix_view_array(ndarray_ptr(solution->Sy,index),ny,np);
     Ji=gsl_matrix_view_array(ndarray_ptr(solution->Jy,index),ny,ny);
     Bi=gsl_matrix_view_array(ndarray_ptr(solution->Jp,index),ny,np);
     ti=ndarray_value(solution->t,&(index[2]));
-    initial=state_projection(n[j],&p[ny*j],ti,Ji,Bi,Phif,PHIb,Si);
+    if (n[j]){
+    initial=state_projection
+      (n[j],&p[ny*j],
+       ti,
+       &Ji.matrix,
+       &Bi.matrix,
+       &Si.matrix);
+    }
     /* make a near steady state approximation 
        for the whole state vector */
     near_steady_state_approximation
       (&Sf.matrix,
        &Si.matrix,
        &Ji.matrix,
-       &Bi.matrix);
+       &Bi.matrix,
+       tf,ti,
+       w);
     /* improve on the previous result 
        where steady state condition is not met */
     if(n[j]){
-      PBS(initial,final,work);
+      PBS(initial,final,&PHIf.matrix,&PHIb.matrix,work);
       /* extract the smaller matrix 
          and update the overall result: */
-      
+      update_sensitivity_from_state(&Sf.matrix,final,&p[ny*j],n[j]);
+      state_projection_free(initial);
+      state_projection_free(final);
     }
   }
   free(work);

@@ -10,7 +10,7 @@ all: gsl_odeiv h5attr
 h5block.o: h5block.c h5block.h
 	$(CC) $(CFLAGS) -c $< $(LDFLAGS)
 
-gsl_odeiv: main.c h5block.o ndarray.o solution.o sensitivity_approximation.o
+gsl_odeiv: main.c h5block.c ndarray.c solution.c sensitivity_approximation.c
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS) -ldl
 
 

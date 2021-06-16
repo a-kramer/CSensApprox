@@ -3,14 +3,16 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include "solution.h"
+#include <gsl/gsl_matrix.h>
+#include <gsl/gsl_vector.h>
+#include <gsl/gsl_linalg.h>
+
 
 typedef struct {
   double t;
   gsl_matrix *dfdy; // A in the paper
   gsl_matrix *dfdp; // B in the paper
   gsl_matrix *dydp; // sensitivity
-  gsl_matrix *PHI_fwd; // transition matrix forward
-  gsl_matrix *PHI_bwd; // transition matrix backward
 } state_t;
 
 typedef struct {

@@ -14,6 +14,7 @@
 #include "h5block.h"
 #include "ndarray.h"
 #include "solution.h"
+#include "sensitivity_approximation.h"
 #define FALSE 0
 
 #define DEFAULT 1
@@ -431,7 +432,7 @@ read_tspan(char *val)/*a string of the form "a:b:c" or "a b c". */{
   int n=0,j;
   char *s,*p;
   int size=3;
-  double *t=ndarray_alloc(1,&size);
+  ndarray *t=ndarray_alloc(1,&size);
   if (val){
     s=val;
     p=val;
@@ -565,12 +566,13 @@ main(int argc, char *argv[]){
   // load system from file and test it
   jacp dfdp;
   gsl_odeiv2_system sys = load_system(model_name, d, par->data, &dfdp);
-  fprintf(stderr,
-	  "[%s] ode system dim: %li and %li parameters (%li inputs) with parameters:\n",
-	  __func__,
-	  sys.dimension,
-	  par->size,
-	  nu);
+  fprintf
+    (stderr,
+     "[%s] ode system dim: %li and %li parameters (%li inputs) with parameters:\n",
+     __func__,
+     sys.dimension,
+     par->size,
+     nu);
   for (i=0;i<mu->size;i++) fprintf(stderr,"%g ",((double*) sys.params)[i]);
   fprintf(stderr,"(that is exp(mu))\n");
   
