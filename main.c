@@ -393,7 +393,7 @@ void sensitivity_approximation(solution_t *solution)/* solution struct from a nu
     Bi=gsl_matrix_view_array(ndarray_ptr(solution->Jp,index),ny,np);
     ti=ndarray_value(solution->t,&(index[2]));
     
-    if (in_steady_state[j]){
+    if (in_steady_state[j] || (tf-ti) > 10/(j+1)){
       //fprintf(stderr,"[%s] steady state detected at t=%g.\n",__func__,tf);
       // prepare:
       gsl_matrix_memcpy(A,&Ji.matrix);
@@ -619,7 +619,7 @@ read_tspan(char *val)/*a string of the form "a:b:c" or "a b c". */{
   int n=0,j;
   char *s,*p;
   int size=3;
-  double *t=ndarray_alloc(1,&size);
+  ndarray *t=ndarray_alloc(1,&size);
   if (val){
     s=val;
     p=val;
