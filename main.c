@@ -245,11 +245,13 @@ void write_solution(hid_t h5f, char *name, solution_t* solution){
     ndarray_to_h5(solution->y,g_id,"state");
     ndarray_to_h5(solution->f,g_id,"f");
     ndarray_to_h5(solution->t,g_id,"time");
+    ndarray_to_h5(solution->status,g_id,"status");
     ndarray_to_h5(solution->Jy,g_id,"jac");
     ndarray_to_h5(solution->Jp,g_id,"jacp");
     ndarray_to_h5(solution->Sy,g_id,"sensitivity");
     ndarray_to_h5(solution->PHIf,g_id,"transition_matrix_forward");
     ndarray_to_h5(solution->PHIb,g_id,"transition_matrix_backward");
+    
     H5Gclose(g_id);
   }
 }

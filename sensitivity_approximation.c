@@ -277,7 +277,7 @@ void sensitivity_approximation(solution_t *solution)/* solution struct from a nu
   int nt = solution->t->size[0];
   int index[3]={0,0,0};
   int j;
-
+  int status;
   double tf, ti;
   gsl_matrix_view PHIf;
   gsl_matrix_view PHIb;
@@ -288,9 +288,9 @@ void sensitivity_approximation(solution_t *solution)/* solution struct from a nu
   state_t *initial, *final;
   double *work=malloc(sizeof(double)*ny*np);
   expm_work_t *w=work_mem_alloc(ny,np);
-  fprintf(stderr,"[%s] approximating the sensitivity at %i time points\n",__func__,nt);
+  //fprintf(stderr,"[%s] approximating the sensitivity at %i time points\n",__func__,nt);
   for (j=1;j<nt;j++){
-    fprintf(stderr,"[%s] %i state variables are not in steady state.\n",__func__,n[j]);
+    //fprintf(stderr,"[%s] %i state variables are not in steady state.\n",__func__,n[j]);
     // create appropriate vector views:
     index[2]=j; // the current time index
 
@@ -333,7 +333,11 @@ void sensitivity_approximation(solution_t *solution)/* solution struct from a nu
        w);
     /* improve on the previous result 
        where steady state condition is not met */
-    if(n[j]){
+    status=-1+2*((tf-ti)<10.0/(j+1));
+    status*=n[j];
+    solution->status->value[j]=(double) status;
+
+    if(n[j] && (tf-ti)<10/(j+1)){
       PBS(initial,final,&PHIf.matrix,&PHIb.matrix,work);
       /* extract the smaller matrix 
          and update the overall result: */
@@ -342,5 +346,7 @@ void sensitivity_approximation(solution_t *solution)/* solution struct from a nu
       state_projection_free(final);
     }
   }
+  free(n);
+  free(p);
   free(work);
 }

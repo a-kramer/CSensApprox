@@ -6,11 +6,13 @@ log_par=h5read('CaMKIIs.h5','/prior/mu');
 par=exp(log_par);
 npar=length(par);
 
-for i=1:nG
+for i=1:6:nG
  g_name = output_g.Groups(i).Name;
  fprintf("-----\nExperiment %i (%s)\n",i,g_name);
-
+ Major=h5readatt('CaMKIIs.h5',strcat('/data',g_name),'major');
+ Minor=h5readatt('CaMKIIs.h5',strcat('/data',g_name),'minor');
  cy = h5read('CaMKIIs_out.h5',strcat(g_name,'/state'));
+ Status = h5read('CaMKIIs_out.h5',strcat(g_name,'/status'));
  cjac = h5read('CaMKIIs_out.h5',strcat(g_name,'/jac'));
  cjacp = h5read('CaMKIIs_out.h5',strcat(g_name,'/jacp'));
  cS = h5read('CaMKIIs_out.h5',strcat(g_name,'/sensitivity'));
@@ -53,6 +55,7 @@ for i=1:nG
  H = randn(np,1)*h;
  p_default=p;
  p=p_default.*H;
+ p(55:59)=p_default(55:59); % input has to stay the same
  delta_p=p-p_default;
  f=@(t,y) CaMKIIs_vf(t,y,p);
  Jy=@(t,y) CaMKIIs_jac(t,y,p);
@@ -68,10 +71,23 @@ for i=1:nG
    predicted_Y(j,:) = predicted_Y(j,:) + permute(cS(:,:,j)*delta_p,[3,1,2]);
  end%for
  S_err=rel_err(Y2,predicted_Y);
+ l=find(Status<0,1);
  fprintf("sensitivity error estimate based on trajectory prediction: %g\n",S_err);
+ figure(i); clf;
+ subplot(2,1,1);
  plot(t,cSnorm_t);
+ if ~isempty(l)
+  hold on;
+  yL=ylim();
+  plot([t(l),t(l)],yL);
+ end
  xlabel('t');
  ylabel('norm(S)');
+ title(strcat(sprintf('Exp %i.%i with input = [ ',Major,Minor),sprintf('%g ',u),'];'))
+ subplot(2,1,2);
+ stairs(t,Status);
+ xlabel('t');
+ ylabel('status');
  %figure(i);
  %plot(T,Y);
  %xlabel('t');

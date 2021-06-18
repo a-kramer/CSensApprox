@@ -15,6 +15,7 @@ typedef struct {
   ndarray *Sy;
   ndarray *PHIf;
   ndarray *PHIb;
+  ndarray *status;
 } solution_t;
 
 solution_t* solution_alloc(int ny, int np, int nt);
